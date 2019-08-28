@@ -40,8 +40,8 @@ if __name__=="__main__":
 
     estimator.load_data()
     
-    #estimator.posterior_estimation(100,2,cores=2)
-    scriptify(estimator.posterior_estimation)(100,2,cores=2)
+    #estimator.posterior_estimation(1000,4,cores=4)
+    scriptify(estimator.posterior_estimation)(1000,4,cores=4)
 
     estimator.plot_and_estimate()
     pass
