@@ -1,0 +1,183 @@
+import sys
+import os
+import os.path
+import glob
+import re
+import numpy as np
+import theano.tensor as tt
+import pymc3 as pm
+import pandas as pd
+from matplotlib import pyplot as pl
+from theano.compile.ops import as_op
+
+from crackheat_surrogate.load_surrogate import nonnegative_denormalized_surrogate
+from crackheat_surrogate.training_eval import training_eval
+
+
+
+class estparam(object):
+    """Perform parameter estimation for vibrothermography crack heating
+    based on crack surrogates and heating data. """
+    
+    # member variables
+    # inputs:
+    crack_specimens=None  # Array of specimen names (strings)
+    crackheatfiles=None  # Array of crack heat CSV file names (strings)
+    surrogatefiles=None  # Array of surrogate JSON file names (strings)
+    accel_trisolve_devs=None # Optional GPU Acceleration parameters
+
+    # results of load_data() method
+    crack_surrogates=None # List of surrogate objects corresponding to each surrogate file 
+    crackheatfile_dataframes=None # List of Pandas dataframes corresponding to each crack heat file
+    crackheat_table = None # Unified Pandas dataframe from all crackheat files; lines with NaN's are omitted
+
+    # parameter_estimation variables
+    model=None # pymc3 model
+    mu=None
+    msqrtR=None
+    bending_stress=None
+    dynamic_stress=None
+    cracknum=None
+    predicted_crackheating=None
+    crackheating=None
+
+    step=None
+    trace=None
+
+    # estimated values
+    mu_estimate=None
+    msqrtR_estimate=None
+
+    # Predicted and actual heatings based on estimates
+    predicted=None
+    actual=None
+    
+    def __init__(self,**kwargs):
+        for argname in kwargs:
+            if hasattr(self,argname):
+                setattr(self,argname,kwargs[argname])
+                pass
+            else:
+                raise ValueError("Unknown attribute: %s" % (argname))
+            pass
+        pass
+
+    @classmethod
+    def fromfilelists(cls,crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs=None):
+        """Load crack data from parallel lists
+        of specimens, crack heating file names, and surrogate .json file names"""
+        return cls(crack_specimens=crack_specimens,
+                   crackheatfiles=crackheatfiles,
+                   surrogatefiles=surrogatefiles,
+                   accel_trisolve_devs=None)
+
+    def load_data(self):
+        
+        
+        self.crack_surrogates = [ nonnegative_denormalized_surrogate.fromjsonfile(filename) for filename in self.surrogatefiles ]  
+
+        self.crackheatfile_dataframes = [ pd.read_csv(crackheat_file) for crackheat_file in self.crackheatfiles ]
+
+        self.crackheat_table = pd.concat(self.crackheatfile_dataframes,ignore_index=True)
+    
+        # Drop rows in crackheat_table with NaN ThermalPower
+        NaNrownums = np.where(np.isnan(self.crackheat_table["ThermalPower (W)"].values))[0]
+    
+        self.crackheat_table = self.crackheat_table.drop(NaNrownums,axis=0)
+        
+
+        # Add specimen numbers to crackheat table
+        # If this next line is slow, can easily be accelerated with a dictionary!
+        specimen_nums = np.array([ self.crack_specimens.index(specimen) for specimen in self.crackheat_table["Specimen"].values ],dtype=np.uint32)
+        self.crackheat_table["specimen_nums"]=specimen_nums
+        
+        pass
+    
+    
+    
+    def predict_crackheating(self,cracknum,mu,bending_stress,dynamic_stress,msqrtR):
+        
+        retval = np.zeros(cracknum.shape[0],dtype='d')
+        
+        # Could parallelize this loop!
+        for index in range(cracknum.shape[0]):
+            datagrid=np.array(((mu,bending_stress[index],dynamic_stress[index],msqrtR),),dtype='d')
+            retval[index]=self.crack_surrogates[cracknum[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
+            pass
+        return retval
+    
+    def posterior_estimation(self,steps_per_chain,num_chains,cores=None):
+
+        self.model = pm.Model()
+    
+        with self.model:
+            #mu = pm.Uniform('mu',lower=0.01,upper=3.0)
+            #msqrtR = pm.Uniform('msqrtR',lower=500000,upper=50e6)
+            
+            self.mu = pm.Lognormal('mu',mu=0.0,sigma=1.0)
+            self.msqrtR = pm.Lognormal('msqrtR',mu=np.log(20e6),sigma=1.0)
+            
+            self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
+            self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicStressAmpl (Pa)"].values)
+            self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
+            #predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating(cracknum,mu,dynamic_stress,bending_stress,msqrtR))
+            predict_crackheating_op = as_op(itypes=[tt.lvector,tt.dscalar,tt.dvector,tt.dvector,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
+            
+            self.predicted_crackheating = predict_crackheating_op(self.cracknum,self.mu,self.bending_stress,self.dynamic_stress,self.msqrtR)
+            self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
+        
+            self.step = pm.Metropolis()
+            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores) # discard_tuned_samples=False,tune=0)
+            pass
+        pass
+
+    def plot_and_estimate(self,mu_zone=(0.2,0.5),msqrtR_zone=(.37e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
+
+        pl.figure()
+        pm.traceplot(self.trace);
+        
+        mu_vals=self.trace.get_values("mu")
+        msqrtR_vals = self.trace.get_values("msqrtR")
+        
+        pl.figure()
+        pl.clf()
+        pl.hist(mu_vals,bins=marginal_bins)
+        pl.xlabel('mu')
+        pl.grid()
+        
+        
+        pl.figure()
+        pl.clf()
+        pl.hist(msqrtR_vals,bins=marginal_bins)
+        pl.xlabel('m*sqrtR')
+        pl.grid()
+        
+    
+        pl.figure()
+        pl.clf()
+        (hist,hist_mu_edges,hist_msqrtR_edges,hist_image)=pl.hist2d(mu_vals,msqrtR_vals,range=(mu_zone,msqrtR_zone),bins=joint_bins)
+        pl.grid()
+        pl.colorbar()
+        pl.xlabel('mu')
+        pl.ylabel('m*sqrt(R) (sqrt(m)/m^2)')
+        
+        histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
+        self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
+        self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
+    
+        # Compare
+        self.predicted = self.predict_crackheating._FromFunctionOp__fn(self.crackheat_table["specimen_nums"].values, self.mu_estimate,self.crackheat_table["BendingStress (Pa)"].values,self.crackheat_table["DynamicStressAmpl (Pa)"].values,self.msqrtR_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
+        
+        # with:
+        self.actual = self.crackheat_table["ThermalPower (W)"].values
+        
+        pl.figure()
+        pl.plot(self.predicted,self.actual,'x',
+                (0,np.max(self.predicted)),(0,np.max(self.predicted)),'-')
+        pl.xlabel('Predicted heating from model (W)')
+        pl.ylabel('Actual heating from experiment (W)')
+        pl.grid()
+        pl.show()
+        
+        pass
+    pass
