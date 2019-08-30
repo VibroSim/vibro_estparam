@@ -90,12 +90,14 @@ class estparam(object):
         # Drop rows in crackheat_table with NaN ThermalPower
         NaNrownums = np.where(np.isnan(self.crackheat_table["ThermalPower (W)"].values))[0]
     
-        self.crackheat_table = self.crackheat_table.drop(NaNrownums,axis=0)
+        self.crackheat_table.drop(NaNrownums,axis=0,inplace=True)
+        self.crackheat_table.reset_index(drop=True)
 
         if filter_outside_closure_domain:
             # Drop rows in crackheat_table with bending stress less than closure_lowest_avg_load_used
             outside_closure_domain_rownums = np.where((~np.isnan(self.crackheat_table["closure_lowest_avg_load_used"].values)) & (self.crackheat_table["closure_lowest_avg_load_used"].values > self.crackheat_table["BendingStress (Pa)"].values))[0]
             self.crackheat_table = self.crackheat_table.drop(outside_closure_domain_rownums,axis=0)
+            self.crackheat_table.reset_index(drop=True)
                                                        
             pass
             
