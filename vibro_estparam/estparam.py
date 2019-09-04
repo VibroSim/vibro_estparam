@@ -91,13 +91,13 @@ class estparam(object):
         NaNrownums = np.where(np.isnan(self.crackheat_table["ThermalPower (W)"].values))[0]
     
         self.crackheat_table.drop(NaNrownums,axis=0,inplace=True)
-        self.crackheat_table.reset_index(drop=True)
+        self.crackheat_table.reset_index(drop=True,inplace=True)
 
         if filter_outside_closure_domain:
             # Drop rows in crackheat_table with bending stress less than closure_lowest_avg_load_used
             outside_closure_domain_rownums = np.where((~np.isnan(self.crackheat_table["closure_lowest_avg_load_used"].values)) & (self.crackheat_table["closure_lowest_avg_load_used"].values > self.crackheat_table["BendingStress (Pa)"].values))[0]
-            self.crackheat_table = self.crackheat_table.drop(outside_closure_domain_rownums,axis=0)
-            self.crackheat_table.reset_index(drop=True)
+            self.crackheat_table.drop(outside_closure_domain_rownums,axis=0,inplace=True)
+            self.crackheat_table.reset_index(drop=True,inplace=True)
                                                        
             pass
             
@@ -153,21 +153,21 @@ class estparam(object):
         mu_vals=self.trace.get_values("mu")
         msqrtR_vals = self.trace.get_values("msqrtR")
         
-        pl.figure()
+        mu_hist = pl.figure()
         pl.clf()
         pl.hist(mu_vals,bins=marginal_bins)
         pl.xlabel('mu')
         pl.grid()
         
         
-        pl.figure()
+        msqrtR_hist = pl.figure()
         pl.clf()
         pl.hist(msqrtR_vals,bins=marginal_bins)
         pl.xlabel('m*sqrtR')
         pl.grid()
         
     
-        pl.figure()
+        joint_hist = pl.figure()
         pl.clf()
         (hist,hist_mu_edges,hist_msqrtR_edges,hist_image)=pl.hist2d(mu_vals,msqrtR_vals,range=(mu_zone,msqrtR_zone),bins=joint_bins)
         pl.grid()
@@ -200,7 +200,7 @@ class estparam(object):
         markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x','D'])()
         
 
-        pl.figure()
+        prediction_plot = pl.figure()
         pl.clf()
         #pl.plot(self.predicted,self.actual,'x',
         #        (0,np.max(self.predicted)),(0,np.max(self.predicted)),'-')
@@ -212,5 +212,5 @@ class estparam(object):
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
         pl.grid()
         
-        return (self.mu_estimate,self.msqrtR_estimate)
+        return (self.mu_estimate,self.msqrtR_estimate,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
     pass
