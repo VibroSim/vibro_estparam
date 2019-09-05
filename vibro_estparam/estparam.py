@@ -147,7 +147,7 @@ class estparam(object):
         from matplotlib import pyplot as pl
         import cycler
 
-        pl.figure()
+        traceplots=pl.figure()
         pm.traceplot(self.trace);
         
         mu_vals=self.trace.get_values("mu")
@@ -212,5 +212,5 @@ class estparam(object):
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
         pl.grid()
         
-        return (self.mu_estimate,self.msqrtR_estimate,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+        return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
     pass

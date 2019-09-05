@@ -73,7 +73,11 @@ def run(_xmldoc,_element,
     
     estimator.posterior_estimation(1000,4,cores=4)
     #estimator.posterior_estimation(10,4,cores=4,tune=20)
-    (mu_estimate,msqrtR_estimate,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = estimator.plot_and_estimate()
+    (mu_estimate,msqrtR_estimate,traceplots_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = estimator.plot_and_estimate()
+
+    pl.figure(traceplots_fig.number)
+    traceplots_href = hrefv("%s_traceplots.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
+    pl.savefig(traceplots_href.getpath(),dpi=300)
 
     pl.figure(mu_hist_fig.number)
     mu_hist_href = hrefv("%s_mu_histogram.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
