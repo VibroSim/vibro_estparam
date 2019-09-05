@@ -180,7 +180,7 @@ class estparam(object):
         self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
     
         # Compare
-        self.predicted = self.predict_crackheating(self.crackheat_table["specimen_nums"].values, self.mu_estimate,self.crackheat_table["BendingStress (Pa)"].values,self.crackheat_table["DynamicStressAmpl (Pa)"].values,self.msqrtR_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
+        self.predicted = self.predict_crackheating(self.mu_estimate,self.msqrtR_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
         
         # add to crackheat_table
         
