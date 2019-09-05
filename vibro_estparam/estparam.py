@@ -108,10 +108,10 @@ class estparam(object):
     
     def predict_crackheating(self,mu,msqrtR):
         
-        retval = np.zeros(cracknum.shape[0],dtype='d')
+        retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
         # Could parallelize this loop!
-        for index in range(cracknum.shape[0]):
+        for index in range(self.crackheat_table.shape[0]):
             datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
