@@ -106,14 +106,14 @@ class estparam(object):
     
     
     
-    def predict_crackheating(self,cracknum,mu,bending_stress,dynamic_stress,msqrtR):
+    def predict_crackheating(self,mu,msqrtR):
         
         retval = np.zeros(cracknum.shape[0],dtype='d')
         
         # Could parallelize this loop!
         for index in range(cracknum.shape[0]):
-            datagrid=np.array(((mu,bending_stress[index],dynamic_stress[index],msqrtR),),dtype='d')
-            retval[index]=self.crack_surrogates[cracknum[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
+            datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
+            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
         return retval
     
@@ -128,13 +128,13 @@ class estparam(object):
             self.mu = pm.Lognormal('mu',mu=0.0,sigma=1.0)
             self.msqrtR = pm.Lognormal('msqrtR',mu=np.log(20e6),sigma=1.0)
             
-            self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
-            self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicStressAmpl (Pa)"].values)
-            self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
+            #self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
+            #self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicStressAmpl (Pa)"].values)
+            #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
             #predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating(cracknum,mu,dynamic_stress,bending_stress,msqrtR))
-            predict_crackheating_op = as_op(itypes=[tt.lvector,tt.dscalar,tt.dvector,tt.dvector,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
+            predict_crackheating_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
             
-            self.predicted_crackheating = predict_crackheating_op(self.cracknum,self.mu,self.bending_stress,self.dynamic_stress,self.msqrtR)
+            self.predicted_crackheating = predict_crackheating_op(self.mu,self.msqrtR)
             self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
         
             self.step = pm.Metropolis()
