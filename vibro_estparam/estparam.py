@@ -117,7 +117,7 @@ class estparam(object):
             pass
         return retval
     
-    def posterior_estimation(self,steps_per_chain,num_chains,cores=None):
+    def posterior_estimation(self,steps_per_chain,num_chains,cores=None,tune=500):
 
         self.model = pm.Model()
     
@@ -138,11 +138,11 @@ class estparam(object):
             self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
         
             self.step = pm.Metropolis()
-            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores) # discard_tuned_samples=False,tune=0)
+            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune) # discard_tuned_samples=False,tune=0)
             pass
         pass
 
-    def plot_and_estimate(self,mu_zone=(0.05,0.5),msqrtR_zone=(.37e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
+    def plot_and_estimate(self,mu_zone=(0.05,0.5),msqrtR_zone=(.36e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
 
         from matplotlib import pyplot as pl
         import cycler
