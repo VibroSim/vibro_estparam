@@ -131,10 +131,10 @@ class estparam(object):
             #self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
             #self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicStressAmpl (Pa)"].values)
             #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
-            #predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating(cracknum,mu,dynamic_stress,bending_stress,msqrtR))
             predict_crackheating_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
             
             self.predicted_crackheating = predict_crackheating_op(self.mu,self.msqrtR)
+            #self.predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating_op(self.mu,self.msqrtR))
             self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
         
             self.step = pm.Metropolis()
@@ -147,9 +147,10 @@ class estparam(object):
         from matplotlib import pyplot as pl
         import cycler
 
-        traceplots=pl.figure()
-        pm.traceplot(self.trace);
-        
+        #traceplots=pl.figure()
+        traceplot_axes = pm.traceplot(self.trace,divergences=False,var_names=['mu','msqrtR'])
+        traceplots = traceplot_axes[0,0].figure
+
         mu_vals=self.trace.get_values("mu")
         msqrtR_vals = self.trace.get_values("msqrtR")
         
