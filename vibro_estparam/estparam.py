@@ -32,6 +32,7 @@ class estparam(object):
     # parameter_estimation variables
     model=None # pymc3 model
     mu=None
+    dummy_observed_variable=None
     msqrtR=None
     bending_stress=None
     dynamic_stress=None
@@ -127,6 +128,39 @@ class estparam(object):
             
             self.mu = pm.Lognormal('mu',mu=0.0,sigma=1.0)
             self.msqrtR = pm.Lognormal('msqrtR',mu=np.log(20e6),sigma=1.0)
+
+            # Add in a dummy observed variable that does not interact with the model
+            # This is in place because arviz (used for traceplot(), others)
+            # does a conversion called convert_to_dataset() on the PyMC3 
+            # samples. This conversion calls:
+            #   io_pymc3.py/to_inference_data() which calls 
+            #   io_pymc3.py/sample_stats_to_xarray() which calls 
+            #   io_pymc3.py/_extract_log_likelihood()
+            # In our context, extracting the log_likelihood is very slow
+            # because it seems to require many calls to the 
+            # predict_crackheating() function. Because these calls are in 
+            # the main process, not a worker process, they are not delegated
+            # to the GPU (GPU is disabled in main process, because if it 
+            # fork()s after GPU access subprocess GPU access will fail) 
+            # and evaluating the log_likelihood can take hours 
+            # even for a data set that was sampled in 5-10 minutes. 
+            #
+            # Within _extract_log_likelihood() there is a test:
+            #         if len(model.observed_RVs) != 1:
+            # That disables likelihood evaluation if there is more 
+            # than one observed random variable. 
+            #
+            # To trigger that test and disable likelihood evaluation, 
+            # we add this additional observed random variable that 
+            # is otherwise unused in the model
+            #
+            # Other workarounds might be possible; for example it seems
+            # likely that the evaluations would be for exactly 
+            # the same parameter values used in the sampling. 
+            # If so, somehow transferring a cache of predicted heating
+            # values to the main process would probably address the
+            # slowdown as well. 
+            self.dummy_observed_variable = pm.Normal('dummy_observed_variable',mu=0,sigma=1,observed=0.0)
             
             #self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
             #self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicStressAmpl (Pa)"].values)
@@ -148,7 +182,7 @@ class estparam(object):
         import cycler
 
         #traceplots=pl.figure()
-        traceplot_axes = pm.traceplot(self.trace,divergences=False,var_names=['mu','msqrtR'])
+        traceplot_axes = pm.traceplot(self.trace)
         traceplots = traceplot_axes[0,0].figure
 
         mu_vals=self.trace.get_values("mu")
