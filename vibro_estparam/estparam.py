@@ -25,7 +25,7 @@ class estparam(object):
     accel_trisolve_devs=None # Optional GPU Acceleration parameters
 
     # results of load_data() method
-    crack_surrogates=None # List of surrogate objects corresponding to each surrogate file 
+    crack_surrogates=None # List of surrogate objects corresponding to each surrogate file (list of nonnegative_denormalized_surrogate objects)
     crackheatfile_dataframes=None # List of Pandas dataframes corresponding to each crack heat file
     crackheat_table = None # Unified Pandas dataframe from all crackheat files; lines with NaN's are omitted
 
@@ -71,8 +71,21 @@ class estparam(object):
                    accel_trisolve_devs=accel_trisolve_devs)
 
     def load_data(self,filter_outside_closure_domain=True):
-        
-        
+        """Given the lists of crack_specimens, crackheatfiles, surrogatefiles,
+        loaded into appropriate crack members, load the data from the files
+        into into self.crack_surrogates, and self.crackheatfile_dataframes. 
+        The crackheatfile_dataframes are joined into a single table, 
+        self.crackheat_table. An additional column specimen_nums is 
+        added to self.crackheat_table identifying the specimen index. 
+
+        Rows in the crackheat_table with NaN heating are removed. 
+
+        If the optional parameter filter_outside_closure_domain is set
+        (default True), then [rows in the crackheat table with bending
+        stress lower than the closure_lowest_avg_load_used variable
+        stored in the surrogate] are removed. 
+        """
+
         self.crack_surrogates = [ nonnegative_denormalized_surrogate.fromjsonfile(filename) for filename in self.surrogatefiles ]  
 
         self.crackheatfile_dataframes = [ pd.read_csv(crackheat_file) for crackheat_file in self.crackheatfiles ]
@@ -108,6 +121,8 @@ class estparam(object):
     
     
     def predict_crackheating(self,mu,msqrtR):
+        """Predict crackheating for each row in self.crackheat_table,
+        given hypothesized values for mu and msqrtR"""
         
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
@@ -119,6 +134,8 @@ class estparam(object):
         return retval
     
     def posterior_estimation(self,steps_per_chain,num_chains,cores=None,tune=500):
+        """Build and execute PyMC3 Model to obtain self.trace which 
+        holds the chain samples"""
 
         self.model = pm.Model()
     
@@ -177,6 +194,8 @@ class estparam(object):
         pass
 
     def plot_and_estimate(self,mu_zone=(0.05,0.5),msqrtR_zone=(.36e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
+        """ Create diagnostic histograms. Also return coordinates of 
+        joint histogram peak as estimates of mu and msqrtR"""
 
         from matplotlib import pyplot as pl
         import cycler
