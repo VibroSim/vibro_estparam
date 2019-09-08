@@ -12,10 +12,10 @@ from limatix.dc_value import hrefvalue as hrefv
 from limatix.dc_value import numericunitsvalue as numericunitsv
 from limatix.xmldoc import xmldoc
 
+
 from vibro_estparam.estparam import estparam
 
 import matplotlib
-matplotlib.use('gtk3agg') # QT4 calls gtk2 to get style info which fails when it detects gtk3 symbols... so we use gtk3agg here (requires custom python36-cairo rpm on rhel7)
 
 from matplotlib import pyplot as pl
 
@@ -95,13 +95,14 @@ def run(_xmldoc,_element,
     prediction_plot_href = hrefv("%s_prediction_plot.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
     pl.savefig(prediction_plot_href.getpath(),dpi=300)
     
-    return {
-        "dc:mu_estimate": numericunitsv(mu_estimate,"Unitless"),
-        "dc:msqrtR_estimate": numericunitsv(msqrtR_estimate,"m^-1.5"),
-        "dc:mu_histogram": mu_hist_href,
-        "dc:msqrtR_histogram": msqrtR_hist_href,
-        "dc:joint_histogram": joint_hist_href,
-        "dc:prediction_plot": prediction_plot_href,
-    }
+    return (
+        (("dc:traceplots",{ "material": material_str}), traceplots_href),
+        (("dc:mu_estimate",{ "material": material_str}), numericunitsv(mu_estimate,"Unitless")),
+        (("dc:msqrtR_estimate",{"material": material_str}), numericunitsv(msqrtR_estimate,"m^-1.5")),
+        (("dc:mu_histogram",{"material": material_str}), mu_hist_href),
+        (("dc:msqrtR_histogram",{"material": material_str}), msqrtR_hist_href),
+        (("dc:joint_histogram",{"material": material_str}), joint_hist_href),
+        (("dc:prediction_plot",{"material": material_str}), prediction_plot_href),
+    )
 
     
