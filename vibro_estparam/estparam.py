@@ -5,6 +5,9 @@ import glob
 import re
 import numpy as np
 import theano.tensor as tt
+from theano import gof
+#from theano import pp
+import theano.tests.unittest_tools
 import pymc3 as pm
 import pandas as pd
 from theano.compile.ops import as_op
@@ -12,6 +15,45 @@ from theano.compile.ops import as_op
 from crackheat_surrogate.load_surrogate import nonnegative_denormalized_surrogate
 
 
+
+class predict_crackheating_op(gof.Op):
+    # Custom theano operation representing
+    # the predict_crackheating() function
+    
+    # Properties attribute
+    __props__ = ()
+    itypes = None
+    otypes = None
+    estparam_obj = None
+
+    def perform(self,node,inputs_storage,outputs_storage):
+        out = self.estparam_obj.predict_crackheating(*inputs_storage)
+
+        outputs_storage[0][0] = out
+        pass
+
+    def grad(self,inputs,output_grads):
+        mu=inputs[0]
+        msqrtR=inputs[1]
+        
+        return [ (self.predict_crackheating_grad_mu_op(*inputs)*output_grads[0]).sum(), (self.predict_crackheating_grad_msqrtR_op(*inputs)*output_grads[0]).sum() ]   # I believe the sum()s here are because output_grads has a single element (corresponding to our single output) but that output is a vector, so output_grads[0] is a vector. We are supposed to return the tensor product dC/df * df_i/dx where dC/df is output_gradients[0], df_1/dx is predict_crackheating_grad_mu_op, and df_2/dx is predict_crackheating_grad_msqrtR_op. Since f_1 and f_2 are vectors, dC_df is also a vector and returning the tensor product means summing over the elements. 
+
+    
+    def infer_shape(self,node,input_shapes):
+        return [ (self.estparam_obj.crackheat_table.shape[0],) ]
+
+    
+
+    def __init__(self,estparam_obj):
+        self.itypes = [tt.dscalar,tt.dscalar]
+        self.otypes = [tt.dvector]
+        self.estparam_obj = estparam_obj
+        
+        self.predict_crackheating_grad_mu_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.estparam_obj.predict_crackheating_grad_mu)
+        self.predict_crackheating_grad_msqrtR_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.estparam_obj.predict_crackheating_grad_msqrtR)
+
+        pass
+    pass
 
 class estparam(object):
     """Perform parameter estimation for vibrothermography crack heating
@@ -50,6 +92,9 @@ class estparam(object):
     # Predicted and actual heatings based on estimates
     predicted=None
     actual=None
+
+    # instance of predict_crackheating_op class (above)
+    predict_crackheating_op_instance=None
     
     def __init__(self,**kwargs):
         for argname in kwargs:
@@ -118,6 +163,34 @@ class estparam(object):
         
         pass
     
+
+    def predict_crackheating_grad_mu(self,mu,msqrtR):
+        """Predict derivative of crackheating with respect to mu for each row in self.crackheat_table,
+        given hypothesized values for mu and msqrtR"""
+        
+        retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
+        
+        # Could parallelize this loop!
+        for index in range(self.crackheat_table.shape[0]):
+            datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
+            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            pass
+        return retval
+
+
+    def predict_crackheating_grad_msqrtR(self,mu,msqrtR):
+        """Predict derivative of crackheating with respect to mu for each row in self.crackheat_table,
+        given hypothesized values for mu and msqrtR"""
+        
+        retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
+        
+        # Could parallelize this loop!
+        for index in range(self.crackheat_table.shape[0]):
+            datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
+            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate_derivative(datagrid,3,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            pass
+        return retval
+    
     
     
     def predict_crackheating(self,mu,msqrtR):
@@ -132,6 +205,8 @@ class estparam(object):
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
         return retval
+
+        
     
     def posterior_estimation(self,steps_per_chain,num_chains,cores=None,tune=500):
         """Build and execute PyMC3 Model to obtain self.trace which 
@@ -182,13 +257,38 @@ class estparam(object):
             #self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
             #self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicStressAmpl (Pa)"].values)
             #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
-            predict_crackheating_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
+            #self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
+
+            self.predict_crackheating_op_instance = predict_crackheating_op(self)
+
+            # Verify that our op correctly calculates the gradient
+            #theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ np.array(0.3), np.array(5e6)]) # mu=0.3, msqrtR=5e6
+
+            mu_testval = tt.dscalar('mu_testval')
+            mu_testval.tag.test_value = 0.3 # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
             
-            self.predicted_crackheating = predict_crackheating_op(self.mu,self.msqrtR)
+            msqrtR_testval = tt.dscalar('msqrtR_testval')
+            msqrtR_testval.tag.test_value = 5e6 # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+
+            test_function = theano.function([mu_testval,msqrtR_testval],self.predict_crackheating_op_instance(mu_testval,msqrtR_testval))
+            jac_mu = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,msqrtR_testval),mu_testval)
+            jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
+            jac_mu_numeric = (test_function(0.301,5e6)-test_function(0.300,5e6))/.001
+            assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
+
+            jac_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,msqrtR_testval),msqrtR_testval)
+            jac_msqrtR_analytic = jac_msqrtR.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
+            jac_msqrtR_numeric = (test_function(0.300,5.01e6)-test_function(0.300,5.00e6))/.01e6
+            assert(np.linalg.norm(jac_msqrtR_analytic-jac_msqrtR_numeric)/np.linalg.norm(jac_msqrtR_analytic) < .05)
+
+            
+            # Create pymc3 predicted_crackheating expression
+            self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.msqrtR)
             #self.predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating_op(self.mu,self.msqrtR))
             self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
         
-            self.step = pm.Metropolis()
+            #self.step = pm.Metropolis()
+            self.step=pm.NUTS()
             self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune) # discard_tuned_samples=False,tune=0)
             pass
         pass
