@@ -22,6 +22,10 @@ from matplotlib import pyplot as pl
 
 def run(_xmldoc,_element,
         material_str,
+        steps_per_chain_int = 500,
+        num_chains_int=4,
+        cores_int=4,
+        tune_int=250,
         filter_outside_closure_domain_bool=False):
     
     outputfiles = _xmldoc.xpathcontext(_element,"/prx:inputfiles/prx:inputfile/prx:outputfile")
@@ -71,7 +75,7 @@ def run(_xmldoc,_element,
 
     estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain_bool)
     
-    estimator.posterior_estimation(1000,4,cores=4)
+    estimator.posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
     #estimator.posterior_estimation(10,4,cores=4,tune=20)
     (mu_estimate,msqrtR_estimate,traceplots_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = estimator.plot_and_estimate()
 

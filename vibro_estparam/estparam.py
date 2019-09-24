@@ -4,10 +4,11 @@ import os.path
 import glob
 import re
 import numpy as np
+import theano
 import theano.tensor as tt
 from theano import gof
 #from theano import pp
-import theano.tests.unittest_tools
+#import theano.tests.unittest_tools
 import pymc3 as pm
 import pandas as pd
 from theano.compile.ops import as_op
