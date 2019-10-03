@@ -50,11 +50,56 @@ class predict_crackheating_op(gof.Op):
         self.otypes = [tt.dvector]
         self.estparam_obj = estparam_obj
         
-        self.predict_crackheating_grad_mu_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.estparam_obj.predict_crackheating_grad_mu)
-        self.predict_crackheating_grad_msqrtR_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.estparam_obj.predict_crackheating_grad_msqrtR)
+        self.predict_crackheating_grad_mu_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_grad_mu)
+        self.predict_crackheating_grad_msqrtR_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_grad_msqrtR)
 
         pass
     pass
+
+
+
+
+class predict_crackheating_per_specimen_op(gof.Op):
+    # Custom theano operation representing
+    # the predict_crackheating_per_specimen() function
+    
+    # Properties attribute
+    __props__ = ()
+    itypes = None
+    otypes = None
+    estparam_obj = None
+
+    def perform(self,node,inputs_storage,outputs_storage):
+        out = self.estparam_obj.predict_crackheating_per_specimen(*inputs_storage)
+
+        outputs_storage[0][0] = out
+        pass
+
+    def grad(self,inputs,output_grads):
+        mu=inputs[0]  # mu is now a vector
+        msqrtR=inputs[1] # msqrtR is now a vector
+        ### !!!!! NEEDS FURTHER INVESTIGATION
+        return [ (np.inner(self.predict_crackheating_per_specimen_grad_mu_op(*inputs).T,output_grads[0])).sum(), (np.inner(self.predict_crackheating_per_specimen_grad_msqrtR_op(*inputs).T,output_grads[0])).sum() ]   # I believe the sum()s here are because output_grads has a single element (corresponding to our single output) but that output is a vector, so output_grads[0] is a vector. We are supposed to return the tensor product dC/df * df_i/dx where dC/df is output_gradients[0], df_1/dx is predict_crackheating_grad_mu_op, and df_2/dx is predict_crackheating_grad_msqrtR_op. Since f_1 and f_2 are vectors, dC_df is also a vector and returning the tensor product means summing over the elements. 
+
+    
+    def infer_shape(self,node,input_shapes):
+        return [ (self.estparam_obj.crackheat_table.shape[0],M) ]
+
+    
+
+    def __init__(self,estparam_obj):
+        self.itypes = [tt.dvector,tt.dvector]
+        self.otypes = [tt.dvector]
+        self.estparam_obj = estparam_obj
+        
+        self.predict_crackheating_per_specimen_grad_mu_op = as_op(itypes=[tt.dvector,tt.dvector], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_per_specimen_grad_mu)
+        self.predict_crackheating_per_specimen_grad_msqrtR_op = as_op(itypes=[tt.dvector,tt.dvector], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_per_specimen_grad_msqrtR)
+
+        pass
+    pass
+
+
+
 
 class estparam(object):
     """Perform parameter estimation for vibrothermography crack heating
@@ -81,8 +126,11 @@ class estparam(object):
     dynamic_stress=None
     cracknum=None
     predicted_crackheating=None
-    crackheating=None
+    y_like=None  # y_likelihood function; was just "crackheating" 
 
+    M=None # number of unique specimens
+    N=None # number of data rows
+    
     step=None
     trace=None
 
@@ -160,7 +208,18 @@ class estparam(object):
             self.crackheat_table.reset_index(drop=True,inplace=True)
                                                        
             pass
-            
+
+
+        specimen_nums_filtered = self.crackheat_table["specimen_nums"]
+
+        
+        # number of unique specimens
+        self.M = np.unique(specimen_nums_filtered).shape[0]
+
+        # total number of observations 
+        self.N = specimen_nums_filtered.shape[0]
+
+
         
         pass
     
@@ -196,7 +255,7 @@ class estparam(object):
     
     def predict_crackheating(self,mu,msqrtR):
         """Predict crackheating for each row in self.crackheat_table,
-        given hypothesized values for mu and msqrtR"""
+        given hypothesized single values for mu and msqrtR across the entire dataset"""
         
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
@@ -207,7 +266,57 @@ class estparam(object):
             pass
         return retval
 
+
         
+    def predict_crackheating_per_specimen(self,mu,msqrtR):
+        """Predict crackheating for each row in self.crackheat_table,
+        given hypothesized values for mu and msqrtR per specimen"""
+        
+        retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
+        
+        # Could parallelize this loop!
+        for index in range(self.crackheat_table.shape[0]):  # ... going from 0...N-1 -- iterating over all the rows in the data
+            specimen_num=self.crackheat_table["specimen_nums"].values[index]
+            
+            datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR[specimen_num]),),dtype='d')
+            retval[index]=self.crack_surrogates[specimen_num].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
+            pass
+        return retval
+
+
+    def predict_crackheating_per_specimen_grad_mu(self,mu,msqrtR):
+        """Predict derivative of crackheating with respect to mu vector for each row in self.crackheat_table,
+        given hypothesized values for mu and msqrtR"""
+        
+        retval = np.zeros((self.crackheat_table.shape[0],self.M),dtype='d')
+        
+        # Could parallelize this loop!
+        for index in range(self.crackheat_table.shape[0]):
+            specimen_num=self.crackheat_table["specimen_nums"].values[index]
+            datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR[specimen_num]),),dtype='d')
+            retval[index,specimen_num]=self.crack_surrogates[specimen_num].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            pass
+        return retval
+
+
+
+    def predict_crackheating_per_specimen_grad_msqrtR(self,mu,msqrtR):
+        """Predict derivative of crackheating with respect to mu vector for each row in self.crackheat_table,
+        given hypothesized per-specimen vectors for mu and msqrtR"""
+        
+        retval = np.zeros((self.crackheat_table.shape[0],self.M),dtype='d')
+        
+        # Could parallelize this loop!
+        for index in range(self.crackheat_table.shape[0]):
+            specimen_num=self.crackheat_table["specimen_nums"].values[index]
+
+            datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicStressAmpl (Pa)"].values[index],msqrtR[specimen_num]),),dtype='d')
+            retval[index,specimen_num]=self.crack_surrogates[specimen_num].evaluate_derivative(datagrid,3,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            pass
+        return retval
+    
+
+    
     
     def posterior_estimation(self,steps_per_chain,num_chains,cores=None,tune=500):
         """Build and execute PyMC3 Model to obtain self.trace which 
@@ -294,6 +403,9 @@ class estparam(object):
             pass
         pass
 
+
+
+    
     def plot_and_estimate(self,mu_zone=(0.05,0.5),msqrtR_zone=(.36e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
         """ Create diagnostic histograms. Also return coordinates of 
         joint histogram peak as estimates of mu and msqrtR"""
@@ -368,4 +480,141 @@ class estparam(object):
         pl.grid()
         
         return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+
+
+
+    def posterior_estimation_partial_pooling(self,steps_per_chain,num_chains,cores=None,tune=500):
+        """Build and execute PyMC3 Model to obtain self.trace which 
+        holds the chain samples"""
+
+        ThermalPowerPerHz = self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values
+
+        
+        self.model = pm.Model()
+        with self.model:
+
+            #
+            # prior distribution for the mean vector of the BVN
+            #
+            theta = pm.MvNormal('theta', mu=np.array([0, 0]), 
+                                cov = np.array([[100, 0], [0, 100]]), shape = (1, 2))
+            
+            #
+            # prior distribution for covariance matrix in Cholesky form
+            #
+            sd_dist = pm.HalfCauchy.dist(beta=2.5, shape=3)
+            packed_L = pm.LKJCholeskyCov('packed_L', n=2,
+                                         eta=1.2, sd_dist=sd_dist)
+            L = pm.expand_packed_triangular(2, packed_L, lower=True)
+            # If we needed it could get the covariance matrix from
+            #      Sigma = pm.Deterministic('Sigma', L.dot(L.T))
+            #
+            # prior distribution for the error standard deviation
+            #
+            sigmaError = pm.HalfFlat("sigmaError")
+            pass
+        
+        with self.model:
+            # crack random effects (log intercept and log slope in pseudo heating model)
+            # 
+            # for reparameterization start with standardized normal (to keep sampler happy)
+            LambdaStd = pm.MvNormal('LambdaStd', mu=np.zeros(2), cov=np.identity(2),
+                                    shape= (self.M, 2))
+            #
+            #  add in the mean vector and multiply by the Cholesky matrix
+            #  The 'Deterministic' is a sum of the mean (theta) with the mvnormal LambdaStd (standardized) multiplied by L, the lower diagonal Cholesky factor representing the covariance structure in the bivariate normal. 
+            
+            # Lambda represents the logarithms of the parameters  (mu and msqrtR, identified by column)
+            # and which specimen, identified by row. 
+            Lambda = pm.Deterministic('Lambda',  theta + tt.dot(L, LambdaStd.T).T)
+
+            # logmu is M rows 
+            logmu = Lambda[:,0]  
+            logmsqrtR = Lambda[:,1]
+
+            # self.mu is M rows
+            self.mu=np.exp(logmu)
+            self.msqrtR = np.exp(logmsqrtR)
+
+            #
+            # specify the predicted heating from the parameters Lambda (now extracted into mu and msqrtR)... Should be 1 column by N rows. 
+            #
+            # Create pymc3 predicted_crackheating expression
+            self.predict_crackheating_per_specimen_op_instance = predict_crackheating_per_specimen_op(self)
+            self.predicted_crackheating = self.predict_crackheating_per_specimen_op_instance(self.mu,self.msqrtR)
+
+
+            #
+            # specify the likelihood
+            #
+            self.y_like = pm.Normal('y_like',mu=self.predicted_crackheating,sigma=sigmaError*np.ones(self.N),observed=ThermalPowerPerHz)  # may need to broadcast sigmaError over N rows of mu
+            
+            
+            # Add in a dummy observed variable that does not interact with the model
+            # This is in place because arviz (used for traceplot(), others)
+            # does a conversion called convert_to_dataset() on the PyMC3 
+            # samples. This conversion calls:
+            #   io_pymc3.py/to_inference_data() which calls 
+            #   io_pymc3.py/sample_stats_to_xarray() which calls 
+            #   io_pymc3.py/_extract_log_likelihood()
+            # In our context, extracting the log_likelihood is very slow
+            # because it seems to require many calls to the 
+            # predict_crackheating() function. Because these calls are in 
+            # the main process, not a worker process, they are not delegated
+            # to the GPU (GPU is disabled in main process, because if it 
+            # fork()s after GPU access subprocess GPU access will fail) 
+            # and evaluating the log_likelihood can take hours 
+            # even for a data set that was sampled in 5-10 minutes. 
+            #
+            # Within _extract_log_likelihood() there is a test:
+            #         if len(model.observed_RVs) != 1:
+            # That disables likelihood evaluation if there is more 
+            # than one observed random variable. 
+            #
+            # To trigger that test and disable likelihood evaluation, 
+            # we add this additional observed random variable that 
+            # is otherwise unused in the model
+            #
+            # Other workarounds might be possible; for example it seems
+            # likely that the evaluations would be for exactly 
+            # the same parameter values used in the sampling. 
+            # If so, somehow transferring a cache of predicted heating
+            # values to the main process would probably address the
+            # slowdown as well. 
+            self.dummy_observed_variable = pm.Normal('dummy_observed_variable',mu=0,sigma=1,observed=0.0)
+            
+
+            # Verify that our op correctly calculates the gradient
+            #theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ np.array(0.3), np.array(5e6)]) # mu=0.3, msqrtR=5e6
+
+            mu_testval = tt.dvector('mu_testval')
+            mu_testval.tag.test_value = 0.3*np.ones(self.M) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+            
+            msqrtR_testval = tt.dvector('msqrtR_testval')
+            msqrtR_testval.tag.test_value = 5e6*np.ones(self.M) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+
+            # !!!*** Will need vectors for mu and msqrtR
+            #test_function = theano.function([mu_testval,msqrtR_testval],self.predict_crackheating_per_specimen_op_instance(mu_testval,msqrtR_testval))
+            #jac_mu = tt.jacobian(self.predict_crackheating_per_specimen_op_instance(mu_testval,msqrtR_testval),mu_testval)
+            #jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
+            #jac_mu_numeric = (test_function(0.301,5e6)-test_function(0.300,5e6))/.001
+            #assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
+
+            #jac_msqrtR = tt.jacobian(self.predict_crackheating_per_specimen_op_instance(mu_testval,msqrtR_testval),msqrtR_testval)
+            #jac_msqrtR_analytic = jac_msqrtR.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
+            #jac_msqrtR_numeric = (test_function(0.300,5.01e6)-test_function(0.300,5.00e6))/.01e6
+            #assert(np.linalg.norm(jac_msqrtR_analytic-jac_msqrtR_numeric)/np.linalg.norm(jac_msqrtR_analytic) < .05)
+            pass
+
+        # set up for sampling
+        
+        with self.model:
+        
+            #self.step = pm.Metropolis()
+            self.step=pm.NUTS(target_accept=0.80)
+            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune) # discard_tuned_samples=False,tune=0)
+            pass
+        pass
+
+    
     pass
