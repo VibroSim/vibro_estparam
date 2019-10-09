@@ -247,7 +247,7 @@ def scriptify(callable):
             # do not transfer any variables starting with "__"
             pass
         elif varname in context:
-            if context[varname].__name__=="scriptified":
+            if hasattr(context[varname],"__name__") and context[varname].__name__=="scriptified":
                 # Do not object to (but do not overwrite)
                 # a scriptified function
                 pass
