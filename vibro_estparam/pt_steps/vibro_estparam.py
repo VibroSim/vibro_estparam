@@ -26,6 +26,7 @@ def run(_xmldoc,_element,
         num_chains_int=4,
         cores_int=4,
         tune_int=250,
+        partial_pooling_bool=False
         filter_outside_closure_domain_bool=False):
     
     outputfiles = _xmldoc.xpathcontext(_element,"/prx:inputfiles/prx:inputfile/prx:outputfile")
@@ -74,10 +75,20 @@ def run(_xmldoc,_element,
     estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
 
     estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain_bool)
+
+
+    if partial_pooling_bool:        
+        posterior_estimation=estimator.posterior_estimation_partial_pooling
+        plot_and_estimate=estimator.plot_and_estimate_partial_pooling
+        pass
+    else:
+        posterior_estimation=estimator.posterior_estimation
+        plot_and_estimate=estimator.plot_and_estimate
+        pass
     
-    estimator.posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
-    #estimator.posterior_estimation(10,4,cores=4,tune=20)
-    (mu_estimate,msqrtR_estimate,traceplots_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = estimator.plot_and_estimate()
+    posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
+    #posterior_estimation(10,4,cores=4,tune=20)
+    (mu_estimate,msqrtR_estimate,traceplots_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = plot_and_estimate()
 
     pl.figure(traceplots_fig.number)
     traceplots_href = hrefv("%s_traceplots.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())

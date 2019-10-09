@@ -561,8 +561,8 @@ class estparam(object):
             #
             # prior distribution for the mean vector of the BVN
             #
-            theta = pm.MvNormal('theta', mu=np.array([0, 0]), 
-                                cov = np.array([[100, 0], [0, 100]]), shape = (1, 2))
+            theta = pm.MvNormal('theta', mu=np.array([-1.2, 17.7]), 
+                                cov = np.array([[4, 0], [0, 16]]), shape = (1, 2))
             
             #
             # prior distribution for covariance matrix in Cholesky form
@@ -682,5 +682,85 @@ class estparam(object):
             pass
         pass
 
+
+
+    def plot_and_estimate_partial_pooling(self,mu_zone=(0.05,0.5),msqrtR_zone=(.36e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
+        """ Create diagnostic histograms. Also return coordinates of 
+        joint histogram peak as estimates of mu and msqrtR"""
+
+        from matplotlib import pyplot as pl
+        import cycler
+
+        #traceplots=pl.figure()
+        traceplot_axes = pm.traceplot(self.trace)
+        traceplots = traceplot_axes[0,0].figure
+
+
+        theta_vals = self.trace.get_values["theta"]
+
+        mu_vals = np.exp(theta_vals[0,:])
+
+        msqrtR_vals = np.exp(theta_vals[1,:]
+        
+        mu_hist = pl.figure()
+        pl.clf()
+        pl.hist(mu_vals,bins=marginal_bins)
+        pl.xlabel('mu')
+        pl.grid()
+        
+        
+        msqrtR_hist = pl.figure()
+        pl.clf()
+        pl.hist(msqrtR_vals,bins=marginal_bins)
+        pl.xlabel('m*sqrtR')
+        pl.grid()
+        
+    
+        joint_hist = pl.figure()
+        pl.clf()
+        (hist,hist_mu_edges,hist_msqrtR_edges,hist_image)=pl.hist2d(mu_vals,msqrtR_vals,range=(mu_zone,msqrtR_zone),bins=joint_bins)
+        pl.grid()
+        pl.colorbar()
+        pl.xlabel('mu')
+        pl.ylabel('m*sqrt(R) (sqrt(m)/m^2)')
+        
+        histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
+        self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
+        self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
+    
+        # Compare
+        self.predicted = self.predict_crackheating(self.mu_estimate,self.msqrtR_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
+        
+        # add to crackheat_table
+        
+        self.crackheat_table["predicted"]=self.predicted
+
+        # with:
+        self.actual = self.crackheat_table["ThermalPower (W)"].values
+
+        # Group predicted and actual heating by specimen
+        specimen_grouping = self.crackheat_table.groupby("Specimen")
+
+        specimen_groups = [ specimen_grouping.get_group(specimen) for specimen in specimen_grouping.groups ]
+        predicted_by_specimen = [ specimen_group["predicted"].values for specimen_group in specimen_groups ]
+        actual_by_specimen = [ specimen_group["ThermalPower (W)"].values for specimen_group in specimen_groups ]
+        specimen_group_specimens = list(specimen_grouping.groups) 
+
+        markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x','D'])()
+        
+
+        prediction_plot = pl.figure()
+        pl.clf()
+        #pl.plot(self.predicted,self.actual,'x',
+        #        (0,np.max(self.predicted)),(0,np.max(self.predicted)),'-')
+        [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cycler)) for idx in range(len(specimen_group_specimens)) ] 
+        pl.plot((0,np.max(self.predicted)*1e3),(0,np.max(self.predicted)*1e3),'-')
+        pl.legend(specimen_group_specimens,loc='best')
+        pl.xlabel('Predicted heating from model (mW)')
+        pl.ylabel('Actual heating from experiment (mW)')
+        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
+        pl.grid()
+        
+        return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
     
     pass
