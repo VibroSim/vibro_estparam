@@ -8,7 +8,16 @@ import theano
 import theano.tensor as tt
 from theano import gof
 #from theano import pp
-#import theano.tests.unittest_tools
+
+# check_perspecimen_gradient is optional because it requires
+# substantial extra software to be installed. We have already
+# verified it to be correct.
+
+check_perspecimen_gradient = False
+if check_perspecimen_gradient:
+    import theano.tests.unittest_tools
+    pass
+
 import pymc3 as pm
 import pandas as pd
 from theano.compile.ops import as_op
@@ -36,9 +45,36 @@ class predict_crackheating_op(gof.Op):
     def grad(self,inputs,output_grads):
         mu=inputs[0]
         msqrtR=inputs[1]
-        
-        return [ (self.predict_crackheating_grad_mu_op(*inputs)*output_grads[0]).sum(), (self.predict_crackheating_grad_msqrtR_op(*inputs)*output_grads[0]).sum() ]   # I believe the sum()s here are because output_grads has a single element (corresponding to our single output) but that output is a vector, so output_grads[0] is a vector. We are supposed to return the tensor product dC/df * df_i/dx where dC/df is output_gradients[0], df_1/dx is predict_crackheating_grad_mu_op, and df_2/dx is predict_crackheating_grad_msqrtR_op. Since f_1 and f_2 are vectors, dC_df is also a vector and returning the tensor product means summing over the elements. 
 
+        # output_grads has a single element output_grads[0] corresponding to our single vector output
+        #
+        # ... In evaluating grad_x G(x),
+        # where G(x) is representable as C(f(x)) and f(x) is predict_crackheating_op.
+        #
+        # Then grad_x G(x) = dC/df * df/dx
+        # If f is a vector 
+        # Then grad_x G(x) = sum_i dC/df_i * df_i/dx
+        
+        # If x is also a vector 
+        # Then grad_xj G(x) = sum_i dC/df_i * df_i/dxj
+
+        # And if xj can be x0 (mu) or x1 (msqrtR)
+        # Then grad_xj G(x) = (sum_i dC/df_i * df_i/dx0, sum_i dC/df_i * df_i/dx1), 
+        
+        # 
+        # We are supposed to return the tensor product dC/df_i * df_i/dxj where
+        #          * dC/df_i is output_gradients[0],
+        #          * df_i/dx0 is predict_crackheating_grad_mu_op, and
+        #          * df_i/dx1 is predict_crackheating_grad_msqrtR_op.
+        # Since f is a vectors, dC_df is also a vector
+        #    and returning the tensor product means summing over the elements i.
+        # From the Theano documentation "The grad method must return a list containing
+        #                                one Variable for each input. Each returned Variable
+        #                                represents the gradient with respect to that input
+        #                                computed based on the symbolic gradients with
+        #                                respect to each output."
+        # So we return a list indexed over input j
+        return [ (self.predict_crackheating_grad_mu_op(*inputs)*output_grads[0]).sum(), (self.predict_crackheating_grad_msqrtR_op(*inputs)*output_grads[0]).sum() ]   
     
     def infer_shape(self,node,input_shapes):
         return [ (self.estparam_obj.crackheat_table.shape[0],) ]
@@ -78,12 +114,41 @@ class predict_crackheating_per_specimen_op(gof.Op):
     def grad(self,inputs,output_grads):
         mu=inputs[0]  # mu is now a vector
         msqrtR=inputs[1] # msqrtR is now a vector
-        ### !!!!! NEEDS FURTHER INVESTIGATION
-        return [ (np.inner(self.predict_crackheating_per_specimen_grad_mu_op(*inputs).T,output_grads[0])).sum(), (np.inner(self.predict_crackheating_per_specimen_grad_msqrtR_op(*inputs).T,output_grads[0])).sum() ]   # I believe the sum()s here are because output_grads has a single element (corresponding to our single output) but that output is a vector, so output_grads[0] is a vector. We are supposed to return the tensor product dC/df * df_i/dx where dC/df is output_gradients[0], df_1/dx is predict_crackheating_grad_mu_op, and df_2/dx is predict_crackheating_grad_msqrtR_op. Since f_1 and f_2 are vectors, dC_df is also a vector and returning the tensor product means summing over the elements. 
 
+
+        # output_grads has a single element output_grads[0] corresponding to our single vector output
+        #
+        # ... In evaluating grad_x G(x),
+        # where G(x) is representable as C(f(x)) and f(x) is predict_crackheating_op.
+        #
+        # Then grad_x G(x) = dC/df * df/dx
+        # If f is a vector 
+        # Then grad_x G(x) = sum_i dC/df_i * df_i/dx
+        
+        # ... x is now TWO vectors! 
+        # Then grad_xjk G(x) = sum_i dC/df_i * df_i/dxjk
+
+        # And if xjk can be x0k (mu) or x1k (msqrtR)
+        # Then grad_xjk G(x) = (sum_i dC/df_i * df_i/dx0k, sum_i dC/df_i * df_i/dx1k), 
+        
+        # 
+        # We are supposed to return the tensor product dC/df_i * df_i/dxjk where
+        #          * dC/df_i is output_gradients[0],
+        #          * df_i/dx0k is predict_crackheating_grad_mu_op, and
+        #          * df_i/dx1k is predict_crackheating_grad_msqrtR_op.
+        # Since f is a vectors, dC_df is also a vector
+        #    and returning the tensor product means summing over the elements i. 
+        # From the Theano documentation "The grad method must return a list containing
+        #                                one Variable for each input. Each returned Variable
+        #                                represents the gradient with respect to that input
+        #                                computed based on the symbolic gradients with
+        #                                respect to each output."
+        # So we return a list indexed over input j.
+
+        return [ (self.predict_crackheating_per_specimen_grad_mu_op(*inputs).T*output_grads[0]).sum(1), (self.predict_crackheating_per_specimen_grad_msqrtR_op(*inputs).T*output_grads[0]).sum(1) ]  
     
     def infer_shape(self,node,input_shapes):
-        return [ (self.estparam_obj.crackheat_table.shape[0],M) ]
+        return [ (self.estparam_obj.crackheat_table.shape[0],) ] #self.estparam_obj.M) ]
 
     
 
@@ -584,26 +649,27 @@ class estparam(object):
             self.dummy_observed_variable = pm.Normal('dummy_observed_variable',mu=0,sigma=1,observed=0.0)
             
 
-            # Verify that our op correctly calculates the gradient
-            #theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ np.array(0.3), np.array(5e6)]) # mu=0.3, msqrtR=5e6
+            if check_perspecimen_gradient:
+                # verify_grad() only works when theano.config.compute_test_value is "off"
+                try:
+                    orig_ctv = theano.config.compute_test_value
+                    theano.config.compute_test_value = "off"
+                    # Verify that our op correctly calculates the gradient
+                    print("grad_mu_values = %s" % (str(self.predict_crackheating_per_specimen_grad_mu(np.array([0.3]*self.M), np.array([5e6]*self.M)))))
+                    print("grad_msqrtR_values = %s" % (str(self.predict_crackheating_per_specimen_grad_msqrtR(np.array([0.3]*self.M), np.array([5e6]*self.M)))))
 
-            mu_testval = tt.dvector('mu_testval')
-            mu_testval.tag.test_value = 0.3*np.ones(self.M) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+                    # Test gradient with respect to mu
+                    theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_per_specimen_op_instance(mu_val, theano.shared(np.array([5e6]*self.M))) ,[ np.array([0.3]*self.M),],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
+                    # Test gradient with respect to msqrtR
+                    theano.tests.unittest_tools.verify_grad(lambda msqrtR_val: self.predict_crackheating_per_specimen_op_instance(theano.shared(np.array([0.3]*self.M)),msqrtR_val) ,[ np.array([5e6]*self.M)],abs_tol=1e-20,rel_tol=1e-8,eps=1.0) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors. 
+
+                    print("\n\n\nVerify_grad() completed!!!\n\n\n")
+                    pass
+                finally:
+                    theano.config.compute_test_value = orig_ctv
+                    pass
+                pass
             
-            msqrtR_testval = tt.dvector('msqrtR_testval')
-            msqrtR_testval.tag.test_value = 5e6*np.ones(self.M) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
-
-            # !!!*** Will need vectors for mu and msqrtR
-            #test_function = theano.function([mu_testval,msqrtR_testval],self.predict_crackheating_per_specimen_op_instance(mu_testval,msqrtR_testval))
-            #jac_mu = tt.jacobian(self.predict_crackheating_per_specimen_op_instance(mu_testval,msqrtR_testval),mu_testval)
-            #jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
-            #jac_mu_numeric = (test_function(0.301,5e6)-test_function(0.300,5e6))/.001
-            #assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
-
-            #jac_msqrtR = tt.jacobian(self.predict_crackheating_per_specimen_op_instance(mu_testval,msqrtR_testval),msqrtR_testval)
-            #jac_msqrtR_analytic = jac_msqrtR.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
-            #jac_msqrtR_numeric = (test_function(0.300,5.01e6)-test_function(0.300,5.00e6))/.01e6
-            #assert(np.linalg.norm(jac_msqrtR_analytic-jac_msqrtR_numeric)/np.linalg.norm(jac_msqrtR_analytic) < .05)
             pass
 
         # set up for sampling
