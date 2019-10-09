@@ -26,7 +26,7 @@ def run(_xmldoc,_element,
         num_chains_int=4,
         cores_int=4,
         tune_int=250,
-        partial_pooling_bool=False
+        partial_pooling_bool=False,
         filter_outside_closure_domain_bool=False):
     
     outputfiles = _xmldoc.xpathcontext(_element,"/prx:inputfiles/prx:inputfile/prx:outputfile")

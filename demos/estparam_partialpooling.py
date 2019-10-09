@@ -44,7 +44,7 @@ if __name__=="__main__":
     scriptify(estimator.load_data)(filter_outside_closure_domain=True)
     
     #estimator.posterior_estimation(1000,4,cores=4)
-    scriptify(estimator.posterior_estimation_partial_pooling)(1000,4,cores=1)
+    scriptify(estimator.posterior_estimation_partial_pooling)(500,4,cores=4,tune=50)
     scriptify(estimator.plot_and_estimate_partial_pooling)()
     pl.show()
     pass

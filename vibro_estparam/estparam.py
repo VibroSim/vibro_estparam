@@ -562,7 +562,7 @@ class estparam(object):
             # prior distribution for the mean vector of the BVN
             #
             theta = pm.MvNormal('theta', mu=np.array([-1.2, 17.7]), 
-                                cov = np.array([[4, 0], [0, 16]]), shape = (1, 2))
+                                cov = np.array([[4.0, 0.0], [0.0, 16.0]]), shape = (1, 2))
             
             #
             # prior distribution for covariance matrix in Cholesky form
@@ -700,7 +700,7 @@ class estparam(object):
 
         mu_vals = np.exp(theta_vals[0,:])
 
-        msqrtR_vals = np.exp(theta_vals[1,:]
+        msqrtR_vals = np.exp(theta_vals[1,:])
         
         mu_hist = pl.figure()
         pl.clf()
