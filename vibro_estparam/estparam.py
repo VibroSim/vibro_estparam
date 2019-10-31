@@ -2,6 +2,7 @@ import sys
 import os
 import os.path
 import glob
+import collections
 import re
 import numpy as np
 import theano
@@ -684,36 +685,236 @@ class estparam(object):
 
 
 
-    def plot_and_estimate_partial_pooling(self,mu_zone=(0.05,0.5),msqrtR_zone=(.36e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
+    def plot_and_estimate_partial_pooling(self,mu_zone=(0.05,1.0),msqrtR_zone=(29.5e6,48.6e6),marginal_bins=50,joint_bins=(230,200)):
         """ Create diagnostic histograms. Also return coordinates of 
         joint histogram peak as estimates of mu and msqrtR"""
 
         from matplotlib import pyplot as pl
+        from mpl_toolkits.axes_grid1.inset_locator import inset_axes
         import cycler
 
         #traceplots=pl.figure()
-        traceplot_axes = pm.traceplot(self.trace)
+        #traceplot_axes = pm.traceplot(self.trace,figsize=(12,self.M*4+12))
+        traceplot_axes = pm.traceplot(self.trace,figsize=(3,9.2),textsize=2.0)
         traceplots = traceplot_axes[0,0].figure
+        
 
 
-        theta_vals = self.trace.get_values["theta"]
+        theta_vals = self.trace.get_values("theta")
 
-        mu_vals = np.exp(theta_vals[0,:])
+        # Unpack packed_L: elements L0 L1 L2 ->
+        #  [ L0   0  ]
+        #  [ L1   L2 ]
+        #packed_L = self.trace.get_values("packed_L")
 
-        msqrtR_vals = np.exp(theta_vals[1,:])
+        trace_frame=pd.DataFrame(index=pd.RangeIndex(theta_vals.shape[0]))
+        
+        for varname in self.trace.varnames:
+            vardata = self.trace.get_values(varname)
+            it=np.nditer(vardata[0,...],flags=['multi_index'])
+            while not it.finished:
+                colname = varname
+                if it.multi_index != ():
+                    colname += str(it.multi_index).replace(", ","__")
+                    pass
+                colindex = (slice(None),)+it.multi_index
+                trace_frame.insert(len(trace_frame.columns),colname,vardata[colindex])
+                it.iternext()
+            vardims = vardata.shape[1:]
+            pass
+        #trace_frame.to_csv('/tmp/trace.csv')
+
+
+        # Bill's traceplots: 
+        theta_L_sigmaerror = pl.figure()
+        theta_L_sigmaerror_datatitles = [ "theta(0__0)", "packed_L(1,)","theta(0__1)","packed_L(2,)","packed_L(0,)","sigmaError"]
+        for subplotnum in range(len(theta_L_sigmaerror_datatitles)):
+            datatitle=theta_L_sigmaerror_datatitles[subplotnum]
+            pl.subplot(3,2,subplotnum+1)
+            pl.plot(trace_frame.index,trace_frame[datatitle])
+            pl.xlabel('Sample index')
+            pl.ylabel(datatitle)
+            pl.grid(True)
+            pass
+
+        lambdaplots = []
+        lambdasubplotrows = 4
+        lambdacnt = 0
+
+        while lambdacnt < self.trace["Lambda"].shape[1]:
+            lambdaplot = pl.figure()
+
+            for subplotrownum in range(lambdasubplotrows):
+                if lambdacnt >= self.trace["Lambda"].shape[1]:
+                    break
+
+                pl.subplot(lambdasubplotrows,2,subplotrownum*2+1)
+                pl.plot(trace_frame.index,self.trace["Lambda"][:,lambdacnt,0])
+                pl.xlabel('Sample index')
+                pl.ylabel('Lambda(%d__0)' % (lambdacnt))
+                if subplotrownum==0:
+                    pl.title('per-sample ln(mu)')
+                    pass
+                pl.grid(True)
+
+                pl.subplot(lambdasubplotrows,2,subplotrownum*2+2)
+                pl.plot(trace_frame.index,self.trace["Lambda"][:,lambdacnt,1])
+                pl.xlabel('Sample index')
+                pl.ylabel('Lambda(%d__1)' % (lambdacnt))
+                if subplotrownum==0:
+                    pl.title('per-sample ln(msqrtR)')
+                    pass
+                pl.grid(True)
+                
+                lambdacnt+=1
+
+                pass
+            lambdaplots.append(lambdaplot)
+            pass
+        
+        histograms=collections.OrderedDict()
+
+        # First create the histograms for the traces in theta_L_sigmaerror
+        for datatitle in theta_L_sigmaerror_datatitles:
+            histfig=pl.figure()
+            pl.hist(trace_frame[datatitle],bins=18)
+            pl.title(datatitle)
+            pl.ylabel('Frequency')
+            pl.grid(True)
+            histograms[datatitle]=histfig
+            pass
+
+
+        # Now create histograms for the lambdas
+        for lambdacnt in range(self.trace["Lambda"].shape[1]):
+            histfig=pl.figure()
+            datatitle = "Lambda[%d,0]" % (lambdacnt)
+            pl.hist(self.trace["Lambda"][:,lambdacnt,0],bins=marginal_bins,range=(np.log(mu_zone[0]),np.log(mu_zone[1])))
+            pl.title("%s: ln(mu) for crack #%d" % (datatitle,lambdacnt))
+            pl.ylabel('Frequency')
+            pl.grid(True)
+
+            # draw inset
+            ax=pl.gca()
+            axins = inset_axes(ax,width="20%",height="20%",loc="upper right")
+            axins.hist(self.trace["Lambda"][:,lambdacnt,0],bins=marginal_bins)
+            pl.grid(True)
+            histograms[datatitle]=histfig
+
+
+            histfig=pl.figure()
+            datatitle = "Lambda[%d,1]" % (lambdacnt)
+            pl.hist(self.trace["Lambda"][:,lambdacnt,1],bins=marginal_bins,range=(np.log(msqrtR_zone[0]),np.log(msqrtR_zone[1])))
+            pl.title("%s: ln(msqrtR) for crack #%d" % (datatitle,lambdacnt))
+            pl.ylabel('Frequency')
+            pl.grid(True)
+
+            # draw inset
+            ax=pl.gca()
+            axins = inset_axes(ax,width="20%",height="20%",loc="upper right")
+            axins.hist(self.trace["Lambda"][:,lambdacnt,1],bins=marginal_bins)
+            pl.grid(True)
+
+            histograms[datatitle]=histfig
+            
+            
+            pass
+
+        
+        
+        # Bill: Suggest scatterplot from medians of (mu,sqrtR) of each crack (lambdas). 
+        # with ellipse centered at median (theta1) and based on covariances based on its Cholesky decomposition. 
+        # illustrates crack-to-crack variability and relationship between parameters
+        Lambda0_medians = np.median(self.trace["Lambda"][:,:,0],axis=0)
+        Lambda1_medians = np.median(self.trace["Lambda"][:,:,1],axis=0)
+
+        Theta0_median = np.median(self.trace["theta"][:,0,0],axis=0)
+        Theta1_median = np.median(self.trace["theta"][:,0,1],axis=0)
+
+        lambda_scatterplot = pl.figure()
+        pl.plot(Lambda0_medians,Lambda1_medians,'x')
+        pl.plot(Theta0_median,Theta1_median,'o')
+
+        # The lambda distribution is a multivariate normal with sigma = LL'. 
+        packed_L=np.median(self.trace.get_values("packed_L"),axis=0)
+        L=np.array(((packed_L[0],0.0),(packed_L[1],packed_L[2])),dtype='d')
+        LLt = np.dot(L,L.T)
+        inv_LLt = np.linalg.inv(LLt)
+        (L_evals,L_evects) = np.linalg.eig(inv_LLt)
+        # Now (L_evects * diag(L_evals) * L_evects.T) = inv_LLt
+        # so the exponent of the multivariate normal distribution
+        # -(1/2)(x-mean).T * inv_LLt * (x-mean)
+        # becomes
+        # -(1/2)(x-mean).T * (L_evects * diag(L_evals) * L_evects.T) * (x-mean)
+        # Regrouping parentheses
+        # -(1/2) ( (x-mean).T * L_evects ) * diag(L_evals) * (L_evects.T * (x-mean) )
+        # So the first element of (L_evects.T * (x-mean) ) is squared
+        # and multiplied by the first element of L_evals and that is 
+        # added to the same thing with the 2nd element... final result
+        # multiplied by 1/2. 
+        # So setting this equal to a constant... say -1 
+        # says el_1^2*L_eval1/2 + el_2^2 *L_eval2/2 = 1
+        # So this is the equation of an ellipse where the axis lengths
+        # are sqrt(2/L_eval1) and sqrt(2/L_eval2)
+
+        # (1/2) ( (x-mean).T * L_evects ) * diag(L_evals) * (L_evects.T * (x-mean) ) = 1 
+        #Parametric form of an ellipse: x=a*cos(t); y=b*sin(t)
+        # letting u1 and u2 be the basis coordinates for the eigenframe
+        # u1=sqrt(2/L_eval1)*cos(t) and u2=sqrt(2/L_eval2)*sin(t)
+        # [(x1 - mean1) ; (x2-mean2)] = L_evects * [ u1; u2]
+        # [x1 ; x2] = L_evects * [ u1; u2] + [ mean1; mean2] 
+        # [x1 ; x2] = L_evects * sqrt(L_eval/2).*[ cos(t); sin(t)]  + [ mean1; mean2] 
+        ellipse_param_t = np.linspace(0.0,2*np.pi,180)
+        ellipse_coords = np.dot(L_evects,np.sqrt(2.0/L_evals[:,np.newaxis])*np.array((np.cos(ellipse_param_t),np.sin(ellipse_param_t)),dtype='d')) + np.array((Theta0_median,Theta1_median),dtype='d')[:,np.newaxis]
+        
+        pl.plot(ellipse_coords[0,:],ellipse_coords[1,:],'-')
+
+        pl.legend(('Lambdas','Theta'),loc="best")
+        pl.xlabel('Lambda[:,0]')
+        pl.ylabel('Lambda[:,1]')
+        pl.grid(True)
+
+        mu_msqrtR_scatterplot = pl.figure()
+        pl.plot(np.exp(Lambda0_medians),np.exp(Lambda1_medians),'x')
+        pl.plot(np.exp(Theta0_median),np.exp(Theta1_median),'o')
+        pl.legend(('Individual cracks','Ensemble'),loc="best")
+        pl.xlabel('mu')
+        pl.ylabel('msqrtR')
+        pl.grid(True)
+
+        # Also look at sampler output for isolated draws (divergent transitions?)
+
+        # 2D scatterplot (2D histogram) of draws for theta1 and theta2 to 
+        # tell us how certain we are about the means of those parameters. 
+
+        mu_vals = np.exp(theta_vals[:,0,0])
+
+        msqrtR_vals = np.exp(theta_vals[:,0,1])
         
         mu_hist = pl.figure()
         pl.clf()
-        pl.hist(mu_vals,bins=marginal_bins)
+        pl.hist(mu_vals,bins=marginal_bins,range=mu_zone)
         pl.xlabel('mu')
+        pl.ylabel('Frequency')
         pl.grid()
+        # draw inset
+        ax=pl.gca()
+        axins = inset_axes(ax,width="20%",height="20%",loc="upper right")
+        axins.hist(mu_vals,bins=marginal_bins)
+        pl.grid(True)
         
         
         msqrtR_hist = pl.figure()
         pl.clf()
-        pl.hist(msqrtR_vals,bins=marginal_bins)
+        pl.hist(msqrtR_vals,bins=marginal_bins,range=msqrtR_zone)
         pl.xlabel('m*sqrtR')
+        pl.ylabel('Frequency')
         pl.grid()
+        # draw inset
+        ax=pl.gca()
+        axins = inset_axes(ax,width="20%",height="20%",loc="upper right")
+        axins.hist(msqrtR_vals,bins=marginal_bins)
+        pl.grid(True)
         
     
         joint_hist = pl.figure()
@@ -723,11 +924,22 @@ class estparam(object):
         pl.colorbar()
         pl.xlabel('mu')
         pl.ylabel('m*sqrt(R) (sqrt(m)/m^2)')
+        # draw inset
+        ax=pl.gca()
+        axins = inset_axes(ax,width="20%",height="20%",loc="upper right")
+        axins.hist2d(mu_vals,msqrtR_vals,bins=joint_bins)
+        pl.grid(True)
         
-        histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
-        self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
-        self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
+        #histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
+        #self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
+        
+        #self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
     
+        self.mu_estimate = np.median(mu_vals)
+        self.msqrtR_estimate = np.median(msqrtR_vals)
+        
+
+
         # Compare
         self.predicted = self.predict_crackheating(self.mu_estimate,self.msqrtR_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
         
@@ -761,6 +973,6 @@ class estparam(object):
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
         pl.grid()
         
-        return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+        return (self.mu_estimate,self.msqrtR_estimate,trace_frame,traceplots,theta_L_sigmaerror,lambdaplots,histograms,lambda_scatterplot,mu_msqrtR_scatterplot,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
     
     pass
