@@ -88,7 +88,7 @@ def run(_xmldoc,_element,
     
     posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
     #posterior_estimation(10,4,cores=4,tune=20)
-    (mu_estimate,msqrtR_estimate,trace_frame,traceplots_fig,theta_L_sigmaerror_fig,lambdaplots,histograms,lambda_scatterplot_fig,mu_msqrtR_scatterplot_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = plot_and_estimate()
+    (mu_estimate,msqrtR_estimate,trace_frame,traceplots_fig,theta_L_sigmaerror_fig,lambdaplots,histograms,lambda_scatterplot_fig,mu_msqrtR_scatterplot_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = plot_and_estimate(mu_zone=(0.05,1.0),msqrtR_zone=(29.5e6,48.6e6),marginal_bins=50,joint_bins=(230,200)) 
 
     trace_frame_href = hrefv("%s_trace_frame.csv" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
     trace_frame.to_csv(trace_frame_href.getpath())
@@ -119,6 +119,16 @@ def run(_xmldoc,_element,
         histogram_hrefs.append(histogram_href)
         histidx+=1
         pass
+
+    pl.figure(lambda_scatterplot_fig.number)
+    lambda_scatterplot_href = hrefv("%s_lambda_scatterplot.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
+    pl.savefig(lambda_scatterplot_href.getpath(),dpi=300)
+
+    pl.figure(mu_msqrtR_scatterplot_fig.number)
+    mu_msqrtR_scatterplot_href = hrefv("%s_mu_msqrtR_scatterplot.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
+    pl.savefig(mu_msqrtR_scatterplot_href.getpath(),dpi=300)
+    
+
 
     pl.figure(mu_hist_fig.number)
     mu_hist_href = hrefv("%s_mu_histogram.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
