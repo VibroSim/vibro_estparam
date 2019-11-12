@@ -10,6 +10,7 @@ import numpy as np
 
 from limatix.dc_value import hrefvalue as hrefv
 from limatix.dc_value import numericunitsvalue as numericunitsv
+from limatix.dc_value import arrayvalue as arrayv
 from limatix.xmldoc import xmldoc
 
 
@@ -88,7 +89,7 @@ def run(_xmldoc,_element,
     
     posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
     #posterior_estimation(10,4,cores=4,tune=20)
-    (mu_estimate,msqrtR_estimate,trace_frame,traceplots_fig,theta_L_sigmaerror_fig,lambdaplots,histograms,lambda_scatterplot_fig,mu_msqrtR_scatterplot_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = plot_and_estimate(mu_zone=(0.05,1.0),msqrtR_zone=(29.5e6,48.6e6),marginal_bins=50,joint_bins=(230,200)) 
+    (mu_estimate,msqrtR_estimate,Theta0_median,Theta1_median,packed_L_median,trace_frame,traceplots_fig,theta_L_sigmaerror_fig,lambdaplots,histograms,lambda_scatterplot_fig,mu_msqrtR_scatterplot_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = plot_and_estimate(mu_zone=(0.05,1.0),msqrtR_zone=(29.5e6,48.6e6),marginal_bins=50,joint_bins=(230,200)) 
 
     trace_frame_href = hrefv("%s_trace_frame.csv" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
     trace_frame.to_csv(trace_frame_href.getpath())
@@ -155,6 +156,9 @@ def run(_xmldoc,_element,
         (("dc:theta_L_sigmaerror",{ "material": material_str}), theta_L_sigmaerror_href),
         (("dc:mu_estimate",{ "material": material_str}), numericunitsv(mu_estimate,"Unitless")),
         (("dc:msqrtR_estimate",{"material": material_str}), numericunitsv(msqrtR_estimate,"m^-1.5")),
+        (("dc:theta0_estimate",{ "material": material_str}), numericunitsv(Theta0_median,"Unitless")),
+        (("dc:theta1_estimate",{"material": material_str}), numericunitsv(Theta1_median,"log_meters_minusthreehalves")),
+        (("dc:packedL_estimate",{"material": material_str}), arrayv(packed_L_median)), # packed_L contains the (1,1), (2,1), and (2,2) elements of the lower triangular L matrix, in that order. LL' is the covariance matrix for (theta0,theta1)
         (("dc:mu_histogram",{"material": material_str}), mu_hist_href),
         (("dc:msqrtR_histogram",{"material": material_str}), msqrtR_hist_href),
         (("dc:joint_histogram",{"material": material_str}), joint_hist_href),

@@ -835,9 +835,9 @@ class estparam(object):
         pl.plot(Lambda0_medians,Lambda1_medians,'x')
         pl.plot(Theta0_median,Theta1_median,'o')
 
-        # The lambda distribution is a multivariate normal with sigma = LL'. 
-        packed_L=np.median(self.trace.get_values("packed_L"),axis=0)
-        L=np.array(((packed_L[0],0.0),(packed_L[1],packed_L[2])),dtype='d')
+        # The lambda distribution is a multivariate normal with covariance matrix capitial sigma = LL'. 
+        packed_L_median=np.median(self.trace.get_values("packed_L"),axis=0)
+        L=np.array(((packed_L_median[0],0.0),(packed_L_median[1],packed_L_median[2])),dtype='d')
         LLt = np.dot(L,L.T)
         inv_LLt = np.linalg.inv(LLt)
         (L_evals,L_evects) = np.linalg.eig(inv_LLt)
@@ -939,6 +939,9 @@ class estparam(object):
         self.mu_estimate = np.median(mu_vals)
         self.msqrtR_estimate = np.median(msqrtR_vals)
         
+        #theta0_estimate = np.median(theta_vals[:,0,0])
+        #theta1_estimate=np.median(theta_vals[:,0,1])
+
 
 
         # Compare
@@ -974,6 +977,6 @@ class estparam(object):
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
         pl.grid()
         
-        return (self.mu_estimate,self.msqrtR_estimate,trace_frame,traceplots,theta_L_sigmaerror,lambdaplots,histograms,lambda_scatterplot,mu_msqrtR_scatterplot,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+        return (self.mu_estimate,self.msqrtR_estimate,Theta1_median,packed_L_median,trace_frame,traceplots,theta_L_sigmaerror,lambdaplots,histograms,lambda_scatterplot,mu_msqrtR_scatterplot,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
     
     pass
