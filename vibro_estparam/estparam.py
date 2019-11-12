@@ -852,20 +852,21 @@ class estparam(object):
         # and multiplied by the first element of L_evals and that is 
         # added to the same thing with the 2nd element... final result
         # multiplied by 1/2. 
-        # So setting this equal to a constant... say -1 
-        # says el_1^2*L_eval1/2 + el_2^2 *L_eval2/2 = 1
+        # So setting this equal to a constant... say -1/2 to get 1 standard deviation 
+        # says el_1^2*L_eval1/2 + el_2^2 *L_eval2/2 = 1/2
+        # or el_1^2*L_eval1 + el_2^2 *L_eval2 = 1
         # So this is the equation of an ellipse where the axis lengths
-        # are sqrt(2/L_eval1) and sqrt(2/L_eval2)
+        # are sqrt(1/L_eval1) and sqrt(1/L_eval2)
 
-        # (1/2) ( (x-mean).T * L_evects ) * diag(L_evals) * (L_evects.T * (x-mean) ) = 1 
+        # (1/2) ( (x-mean).T * L_evects ) * diag(L_evals) * (L_evects.T * (x-mean) ) = 1/2 
         #Parametric form of an ellipse: x=a*cos(t); y=b*sin(t)
         # letting u1 and u2 be the basis coordinates for the eigenframe
-        # u1=sqrt(2/L_eval1)*cos(t) and u2=sqrt(2/L_eval2)*sin(t)
+        # u1=sqrt(1/L_eval1)*cos(t) and u2=sqrt(1/L_eval2)*sin(t)
         # [(x1 - mean1) ; (x2-mean2)] = L_evects * [ u1; u2]
         # [x1 ; x2] = L_evects * [ u1; u2] + [ mean1; mean2] 
-        # [x1 ; x2] = L_evects * sqrt(L_eval/2).*[ cos(t); sin(t)]  + [ mean1; mean2] 
+        # [x1 ; x2] = L_evects * sqrt(1/L_eval).*[ cos(t); sin(t)]  + [ mean1; mean2] 
         ellipse_param_t = np.linspace(0.0,2*np.pi,180)
-        ellipse_coords = np.dot(L_evects,np.sqrt(2.0/L_evals[:,np.newaxis])*np.array((np.cos(ellipse_param_t),np.sin(ellipse_param_t)),dtype='d')) + np.array((Theta0_median,Theta1_median),dtype='d')[:,np.newaxis]
+        ellipse_coords = np.dot(L_evects,np.sqrt(1.0/L_evals[:,np.newaxis])*np.array((np.cos(ellipse_param_t),np.sin(ellipse_param_t)),dtype='d')) + np.array((Theta0_median,Theta1_median),dtype='d')[:,np.newaxis]
         
         pl.plot(ellipse_coords[0,:],ellipse_coords[1,:],'-')
 
