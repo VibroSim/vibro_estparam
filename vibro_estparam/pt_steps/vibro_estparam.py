@@ -163,6 +163,8 @@ def run(_xmldoc,_element,
         (("dc:msqrtR_histogram",{"material": material_str}), msqrtR_hist_href),
         (("dc:joint_histogram",{"material": material_str}), joint_hist_href),
         (("dc:prediction_plot",{"material": material_str}), prediction_plot_href),
+        (("dc:lambda_scatterplot",{"material": material_str}), lambda_scatterplot_href),
+        (("dc:mu_msqrtR_scatterplot",{"material": material_str}), mu_msqrtR_scatterplot_href),
     ]
     ret.extend([ (("dc:lambdaplot",{"material": material_str, "lambdaidx" : str(lambdaidx)}), lambdaplot_hrefs[lambdaidx]) for lambdaidx in range(len(lambdaplot_hrefs))])
 
