@@ -253,7 +253,7 @@ class estparam(object):
         self.crackheat_table = pd.concat(self.crackheatfile_dataframes,ignore_index=True) # NOTE: Pandas warning about sorting along non-concatenation axis should go away once all data has timestamps
 
 
-        assert(np.all(self.crackheat_table["DynamicNormalStressAmpl(Pa)"] > 100*self.crackheat_table["DynamicShearStressAmpl(Pa)"])) # Assumption that shear stress is negligible compared to normal stress for all of this data
+        assert(np.all(self.crackheat_table["DynamicNormalStressAmpl (Pa)"] > 100*self.crackheat_table["DynamicShearStressAmpl (Pa)"])) # Assumption that shear stress is negligible compared to normal stress for all of this data
 
         # Add specimen numbers to crackheat table
         # If this next line is slow, can easily be accelerated with a dictionary!
