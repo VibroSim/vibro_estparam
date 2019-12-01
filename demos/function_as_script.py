@@ -12,6 +12,10 @@
 #    from globals of different names. The assignments
 #    occur with each script call in the __main__
 #    namespace
+#  * NOTE: If used within LIMATIX ProcessTrak  instead 
+#    of assigning into the __main__ namespace it will 
+#    instead assign into the globals of the current
+#    processtrak step.  
 #  * Default arguments work, but relying on them is
 #    dangerous if you have calls with/without the
 #    default arguments in the script, because
@@ -151,7 +155,36 @@ def scriptify(callable):
     mandatoryargnames = argnames[:(len(argnames)-len(synsubtree.args.defaults))]
     defaultargnames = argnames[(len(argnames)-len(synsubtree.args.defaults)):]
 
-    context = sys.modules["__main__"].__dict__
+
+    # Search for a context to write to. Normally this would be
+    # the __main__ globals. But we check first whether there is 
+    # a processtrak step. Do this by inspecting the stack:
+    context = None
+    try: 
+        stacktrace = inspect.stack()
+        for stackcnt in range(1,len(stacktrace)):
+            stackframe=stacktrace[stackcnt][0]
+            stack_global_dict = dict(inspect.getmembers(stackframe))["f_globals"]
+            if "__processtrak_stepname" in stack_global_dict:
+                # This is a global dictionary created by processtrak 
+                # for a processtrak step. 
+                # ... use this context!
+                context = stack_global_dict
+                break
+            pass
+        pass
+    finally:
+        # Avoid keeping references around
+        del stackframe
+        del stacktrace
+        pass
+        
+    if context is None:
+        # Did not find a processtrak context
+        # Use __main__ global dictionary
+        context = sys.modules["__main__"].__dict__
+        pass
+        
 
     CodeModule=ast.Module(body=synsubtree.body,lineno=0)
 
