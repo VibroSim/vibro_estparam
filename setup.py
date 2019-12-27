@@ -9,6 +9,7 @@ from setuptools.command.install_lib import install_lib
 from setuptools.command.install import install
 import setuptools.command.bdist_egg
 import sys
+import distutils.spawn
 #from Cython.Build import cythonize
 
 
@@ -31,7 +32,7 @@ class install_lib_save_version(install_lib):
 
 
 # Extract GIT version
-if os.path.exists(".git"):
+if os.path.exists(".git") and distutils.spawn.find_executable("git") is not None:
     # Check if tree has been modified
     modified = subprocess.call(["git","diff-index","--quiet","HEAD","--"]) != 0
     

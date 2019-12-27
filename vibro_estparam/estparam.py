@@ -965,7 +965,7 @@ class estparam(object):
         actual_by_specimen = [ specimen_group["ThermalPower (W)"].values for specimen_group in specimen_groups ]
         specimen_group_specimens = list(specimen_grouping.groups) 
 
-        markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x','D'])()
+        markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()  #'D'])()
         
 
         prediction_plot = pl.figure()
@@ -980,6 +980,6 @@ class estparam(object):
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
         pl.grid()
         
-        return (self.mu_estimate,self.msqrtR_estimate,Theta1_median,packed_L_median,trace_frame,traceplots,theta_L_sigmaerror,lambdaplots,histograms,lambda_scatterplot,mu_msqrtR_scatterplot,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+        return (self.mu_estimate,self.msqrtR_estimate,Theta0_median,Theta1_median,packed_L_median,trace_frame,traceplots,theta_L_sigmaerror,lambdaplots,histograms,lambda_scatterplot,mu_msqrtR_scatterplot,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
     
     pass

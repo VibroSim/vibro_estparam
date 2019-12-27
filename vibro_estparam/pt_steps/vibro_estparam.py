@@ -45,7 +45,7 @@ def run(_xmldoc,_element,
 
     for outputfile in outputfiles:
         outputdoc = xmldoc.loadhref(hrefv.fromxml(_xmldoc,outputfile))
-        cracks = outputdoc.xpath("dc:crack")
+        cracks = outputdoc.xpath("dc:crack[count(@dc:ignore) < 1]")
         for crack in cracks: 
             specimen=outputdoc.xpathsinglecontextstr(crack,"dc:specimen",default="UNKNOWN")
             material = outputdoc.xpathsinglecontextstr(crack,"dc:spcmaterial",default="UNKNOWN")
@@ -159,6 +159,7 @@ def run(_xmldoc,_element,
         (("dc:theta0_estimate",{ "material": material_str}), numericunitsv(Theta0_median,"Unitless")),
         (("dc:theta1_estimate",{"material": material_str}), numericunitsv(Theta1_median,"log_meters_minusthreehalves")),
         (("dc:packedL_estimate",{"material": material_str}), arrayv(packed_L_median)), # packed_L contains the (1,1), (2,1), and (2,2) elements of the lower triangular L matrix, in that order. LL' is the covariance matrix for (theta0,theta1)
+
         (("dc:mu_histogram",{"material": material_str}), mu_hist_href),
         (("dc:msqrtR_histogram",{"material": material_str}), msqrtR_hist_href),
         (("dc:joint_histogram",{"material": material_str}), joint_hist_href),
