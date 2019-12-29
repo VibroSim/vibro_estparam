@@ -12,6 +12,7 @@ from limatix.dc_value import hrefvalue as hrefv
 from limatix.dc_value import numericunitsvalue as numericunitsv
 from limatix.dc_value import arrayvalue as arrayv
 from limatix.xmldoc import xmldoc
+from limatix.canonicalize_path.canonicalize_path import string_to_etxpath_expression
 
 
 from vibro_estparam.estparam import estparam
@@ -45,28 +46,28 @@ def run(_xmldoc,_element,
 
     for outputfile in outputfiles:
         outputdoc = xmldoc.loadhref(hrefv.fromxml(_xmldoc,outputfile))
-        cracks = outputdoc.xpath("dc:crack[count(@dc:ignore) < 1]")
+        cracks = outputdoc.xpath("dc:crack[count(@dc:ignore) < 1 and dc:spcmaterial=%s]" % (string_to_extpath_expression(material_str)))
         for crack in cracks: 
             specimen=outputdoc.xpathsinglecontextstr(crack,"dc:specimen",default="UNKNOWN")
             material = outputdoc.xpathsinglecontextstr(crack,"dc:spcmaterial",default="UNKNOWN")
-            if material == material_str:
-                crackheat_table_el = outputdoc.xpathsinglecontext(crack,"dc:crackheat_table",default=None)
-                surrogate_el = outputdoc.xpathsinglecontext(crack,"dc:surrogate",default=None)
-                if crackheat_table_el is not None and surrogate_el is not None:
-                    crackheat_table_href = hrefv.fromxml(outputdoc,crackheat_table_el)
-                    surrogate_href = hrefv.fromxml(outputdoc,surrogate_el)
-
-                    crackheatfiles.append(crackheat_table_href.getpath())
-                    surrogatefiles.append(surrogate_href.getpath())
-                    crack_specimens.append(specimen)
-                    pass
-                if crackheat_table_el is None:
-                    print("WARNING: No crack heating table found for specimen %s!" % (specimen))
-                    pass
-                if surrogate_el is None:
-                    print("WARNING: No surrogate found for specimen %s!" % (specimen))
-                    pass
+            assert(material == material_str)
+            crackheat_table_el = outputdoc.xpathsinglecontext(crack,"dc:crackheat_table",default=None)
+            surrogate_el = outputdoc.xpathsinglecontext(crack,"dc:surrogate",default=None)
+            if crackheat_table_el is not None and surrogate_el is not None:
+                crackheat_table_href = hrefv.fromxml(outputdoc,crackheat_table_el)
+                surrogate_href = hrefv.fromxml(outputdoc,surrogate_el)
+                
+                crackheatfiles.append(crackheat_table_href.getpath())
+                surrogatefiles.append(surrogate_href.getpath())
+                crack_specimens.append(specimen)
                 pass
+            if crackheat_table_el is None:
+                print("WARNING: No crack heating table found for specimen %s!" % (specimen))
+                pass
+            if surrogate_el is None:
+                print("WARNING: No surrogate found for specimen %s!" % (specimen))
+                pass
+            
             pass
         pass
 
