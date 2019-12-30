@@ -12,7 +12,7 @@ from limatix.dc_value import hrefvalue as hrefv
 from limatix.dc_value import numericunitsvalue as numericunitsv
 from limatix.dc_value import arrayvalue as arrayv
 from limatix.xmldoc import xmldoc
-from limatix.canonicalize_path.canonicalize_path import string_to_etxpath_expression
+from limatix.canonicalize_path import string_to_etxpath_expression
 
 
 from vibro_estparam.estparam import estparam
@@ -46,7 +46,7 @@ def run(_xmldoc,_element,
 
     for outputfile in outputfiles:
         outputdoc = xmldoc.loadhref(hrefv.fromxml(_xmldoc,outputfile))
-        cracks = outputdoc.xpath("dc:crack[count(@dc:ignore) < 1 and dc:spcmaterial=%s]" % (string_to_extpath_expression(material_str)))
+        cracks = outputdoc.xpath("dc:crack[count(@dc:ignore) < 1 and dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
         for crack in cracks: 
             specimen=outputdoc.xpathsinglecontextstr(crack,"dc:specimen",default="UNKNOWN")
             material = outputdoc.xpathsinglecontextstr(crack,"dc:spcmaterial",default="UNKNOWN")
