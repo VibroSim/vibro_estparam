@@ -45,7 +45,7 @@ class predict_crackheating_op(gof.Op):
 
     def grad(self,inputs,output_grads):
         mu=inputs[0]
-        msqrtR=inputs[1]
+        log_msqrtR=inputs[1]
 
         # output_grads has a single element output_grads[0] corresponding to our single vector output
         #
@@ -59,14 +59,14 @@ class predict_crackheating_op(gof.Op):
         # If x is also a vector 
         # Then grad_xj G(x) = sum_i dC/df_i * df_i/dxj
 
-        # And if xj can be x0 (mu) or x1 (msqrtR)
+        # And if xj can be x0 (mu) or x1 (log_msqrtR)
         # Then grad_xj G(x) = (sum_i dC/df_i * df_i/dx0, sum_i dC/df_i * df_i/dx1), 
         
         # 
         # We are supposed to return the tensor product dC/df_i * df_i/dxj where
         #          * dC/df_i is output_gradients[0],
         #          * df_i/dx0 is predict_crackheating_grad_mu_op, and
-        #          * df_i/dx1 is predict_crackheating_grad_msqrtR_op.
+        #          * df_i/dx1 is predict_crackheating_grad_log_msqrtR_op.
         # Since f is a vectors, dC_df is also a vector
         #    and returning the tensor product means summing over the elements i.
         # From the Theano documentation "The grad method must return a list containing
@@ -75,7 +75,7 @@ class predict_crackheating_op(gof.Op):
         #                                computed based on the symbolic gradients with
         #                                respect to each output."
         # So we return a list indexed over input j
-        return [ (self.predict_crackheating_grad_mu_op(*inputs)*output_grads[0]).sum(), (self.predict_crackheating_grad_msqrtR_op(*inputs)*output_grads[0]).sum() ]   
+        return [ (self.predict_crackheating_grad_mu_op(*inputs)*output_grads[0]).sum(), (self.predict_crackheating_grad_log_msqrtR_op(*inputs)*output_grads[0]).sum() ]   
     
     def infer_shape(self,node,input_shapes):
         return [ (self.estparam_obj.crackheat_table.shape[0],) ]
@@ -88,7 +88,7 @@ class predict_crackheating_op(gof.Op):
         self.estparam_obj = estparam_obj
         
         self.predict_crackheating_grad_mu_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_grad_mu)
-        self.predict_crackheating_grad_msqrtR_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_grad_msqrtR)
+        self.predict_crackheating_grad_log_msqrtR_op = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_grad_log_msqrtR)
 
         pass
     pass
@@ -114,7 +114,7 @@ class predict_crackheating_per_specimen_op(gof.Op):
 
     def grad(self,inputs,output_grads):
         mu=inputs[0]  # mu is now a vector
-        msqrtR=inputs[1] # msqrtR is now a vector
+        log_msqrtR=inputs[1] # log_msqrtR is now a vector
 
 
         # output_grads has a single element output_grads[0] corresponding to our single vector output
@@ -129,14 +129,14 @@ class predict_crackheating_per_specimen_op(gof.Op):
         # ... x is now TWO vectors! 
         # Then grad_xjk G(x) = sum_i dC/df_i * df_i/dxjk
 
-        # And if xjk can be x0k (mu) or x1k (msqrtR)
+        # And if xjk can be x0k (mu) or x1k (log_msqrtR)
         # Then grad_xjk G(x) = (sum_i dC/df_i * df_i/dx0k, sum_i dC/df_i * df_i/dx1k), 
         
         # 
         # We are supposed to return the tensor product dC/df_i * df_i/dxjk where
         #          * dC/df_i is output_gradients[0],
         #          * df_i/dx0k is predict_crackheating_grad_mu_op, and
-        #          * df_i/dx1k is predict_crackheating_grad_msqrtR_op.
+        #          * df_i/dx1k is predict_crackheating_grad_log_msqrtR_op.
         # Since f is a vectors, dC_df is also a vector
         #    and returning the tensor product means summing over the elements i. 
         # From the Theano documentation "The grad method must return a list containing
@@ -146,7 +146,7 @@ class predict_crackheating_per_specimen_op(gof.Op):
         #                                respect to each output."
         # So we return a list indexed over input j.
 
-        return [ (self.predict_crackheating_per_specimen_grad_mu_op(*inputs).T*output_grads[0]).sum(1), (self.predict_crackheating_per_specimen_grad_msqrtR_op(*inputs).T*output_grads[0]).sum(1) ]  
+        return [ (self.predict_crackheating_per_specimen_grad_mu_op(*inputs).T*output_grads[0]).sum(1), (self.predict_crackheating_per_specimen_grad_log_msqrtR_op(*inputs).T*output_grads[0]).sum(1) ]  
     
     def infer_shape(self,node,input_shapes):
         return [ (self.estparam_obj.crackheat_table.shape[0],) ] #self.estparam_obj.M) ]
@@ -159,7 +159,7 @@ class predict_crackheating_per_specimen_op(gof.Op):
         self.estparam_obj = estparam_obj
         
         self.predict_crackheating_per_specimen_grad_mu_op = as_op(itypes=[tt.dvector,tt.dvector], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_per_specimen_grad_mu)
-        self.predict_crackheating_per_specimen_grad_msqrtR_op = as_op(itypes=[tt.dvector,tt.dvector], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_per_specimen_grad_msqrtR)
+        self.predict_crackheating_per_specimen_grad_log_msqrtR_op = as_op(itypes=[tt.dvector,tt.dvector], otypes = [tt.dmatrix])(self.estparam_obj.predict_crackheating_per_specimen_grad_log_msqrtR)
 
         pass
     pass
@@ -187,7 +187,7 @@ class estparam(object):
     model=None # pymc3 model
     mu=None
     dummy_observed_variable=None
-    msqrtR=None
+    log_msqrtR=None
     bending_stress=None
     dynamic_stress=None
     cracknum=None
@@ -202,7 +202,7 @@ class estparam(object):
 
     # estimated values
     mu_estimate=None
-    msqrtR_estimate=None
+    log_msqrtR_estimate=None
 
     # Predicted and actual heatings based on estimates
     predicted=None
@@ -293,42 +293,42 @@ class estparam(object):
         pass
     
 
-    def predict_crackheating_grad_mu(self,mu,msqrtR):
+    def predict_crackheating_grad_mu(self,mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu for each row in self.crackheat_table,
-        given hypothesized values for mu and msqrtR"""
+        given hypothesized values for mu and log_msqrtR"""
         
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
         # Could parallelize this loop!
         for index in range(self.crackheat_table.shape[0]):
-            #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
+            #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
 
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu,
                                         "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "msqrtR": msqrtR},ignore_index=True)
+                                        "log_msqrtR": log_msqrtR},ignore_index=True)
             
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
         return retval
 
 
-    def predict_crackheating_grad_msqrtR(self,mu,msqrtR):
+    def predict_crackheating_grad_log_msqrtR(self,mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu for each row in self.crackheat_table,
-        given hypothesized values for mu and msqrtR"""
+        given hypothesized values for mu and log_msqrtR"""
         
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
         # Could parallelize this loop!
         for index in range(self.crackheat_table.shape[0]):
-            #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
+            #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
 
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu,
                                         "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "msqrtR": msqrtR},ignore_index=True)
+                                        "log_msqrtR": log_msqrtR},ignore_index=True)
             
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate_derivative(datagrid,3,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
@@ -336,29 +336,29 @@ class estparam(object):
     
     
     
-    def predict_crackheating(self,mu,msqrtR):
+    def predict_crackheating(self,mu,log_msqrtR):
         """Predict crackheating for each row in self.crackheat_table,
-        given hypothesized single values for mu and msqrtR across the entire dataset"""
+        given hypothesized single values for mu and log_msqrtR across the entire dataset"""
         
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
         # Could parallelize this loop!
         for index in range(self.crackheat_table.shape[0]):
-            #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],msqrtR),),dtype='d')
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","msqrtR"])
+            #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
+            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu,
                                         "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "msqrtR": msqrtR},ignore_index=True)
+                                        "log_msqrtR": log_msqrtR},ignore_index=True)
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
         return retval
 
 
         
-    def predict_crackheating_per_specimen(self,mu,msqrtR):
+    def predict_crackheating_per_specimen(self,mu,log_msqrtR):
         """Predict crackheating for each row in self.crackheat_table,
-        given hypothesized values for mu and msqrtR per specimen"""
+        given hypothesized values for mu and log_msqrtR per specimen"""
         
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
@@ -366,35 +366,35 @@ class estparam(object):
         for index in range(self.crackheat_table.shape[0]):  # ... going from 0...N-1 -- iterating over all the rows in the data
             specimen_num=self.crackheat_table["specimen_nums"].values[index]
             
-            #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],msqrtR[specimen_num]),),dtype='d')
+            #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu[specimen_num],
                                         "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "msqrtR": msqrtR[specimen_num]},ignore_index=True)
+                                        "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
             
             retval[index]=self.crack_surrogates[specimen_num].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
         return retval
 
 
-    def predict_crackheating_per_specimen_grad_mu(self,mu,msqrtR):
+    def predict_crackheating_per_specimen_grad_mu(self,mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu vector for each row in self.crackheat_table,
-        given hypothesized values for mu and msqrtR"""
+        given hypothesized values for mu and log_msqrtR"""
         
         retval = np.zeros((self.crackheat_table.shape[0],self.M),dtype='d')
         
         # Could parallelize this loop!
         for index in range(self.crackheat_table.shape[0]):
             specimen_num=self.crackheat_table["specimen_nums"].values[index]
-            #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],msqrtR[specimen_num]),),dtype='d')
+            #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu[specimen_num],
                                         "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "msqrtR": msqrtR[specimen_num]},ignore_index=True)
+                                        "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
             
             retval[index,specimen_num]=self.crack_surrogates[specimen_num].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
@@ -402,9 +402,9 @@ class estparam(object):
 
 
 
-    def predict_crackheating_per_specimen_grad_msqrtR(self,mu,msqrtR):
+    def predict_crackheating_per_specimen_grad_log_msqrtR(self,mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu vector for each row in self.crackheat_table,
-        given hypothesized per-specimen vectors for mu and msqrtR"""
+        given hypothesized per-specimen vectors for mu and log_msqrtR"""
         
         retval = np.zeros((self.crackheat_table.shape[0],self.M),dtype='d')
         
@@ -412,13 +412,13 @@ class estparam(object):
         for index in range(self.crackheat_table.shape[0]):
             specimen_num=self.crackheat_table["specimen_nums"].values[index]
 
-            #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],msqrtR[specimen_num]),),dtype='d')
+            #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu[specimen_num],
                                         "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "msqrtR": msqrtR[specimen_num]},ignore_index=True)
+                                        "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
             
             retval[index,specimen_num]=self.crack_surrogates[specimen_num].evaluate_derivative(datagrid,3,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
@@ -438,7 +438,7 @@ class estparam(object):
             #msqrtR = pm.Uniform('msqrtR',lower=500000,upper=50e6)
             
             self.mu = pm.Lognormal('mu',mu=0.0,sigma=1.0)
-            self.msqrtR = pm.Lognormal('msqrtR',mu=np.log(20e6),sigma=1.0)
+            self.log_msqrtR = np.log(pm.Lognormal('msqrtR',mu=np.log(20e6),sigma=1.0))  # !!!*** This might need to be changed.... what is the logarithm of a lognormal distribution??? Is it valid? What about negative numbers???
 
             # Add in a dummy observed variable that does not interact with the model
             # This is in place because arviz (used for traceplot(), others)
@@ -486,24 +486,24 @@ class estparam(object):
             mu_testval = tt.dscalar('mu_testval')
             mu_testval.tag.test_value = 0.3 # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
             
-            msqrtR_testval = tt.dscalar('msqrtR_testval')
-            msqrtR_testval.tag.test_value = 5e6 # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+            log_msqrtR_testval = tt.dscalar('log_msqrtR_testval')
+            log_msqrtR_testval.tag.test_value = np.log(5e6) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
 
-            test_function = theano.function([mu_testval,msqrtR_testval],self.predict_crackheating_op_instance(mu_testval,msqrtR_testval))
-            jac_mu = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,msqrtR_testval),mu_testval)
-            jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
-            jac_mu_numeric = (test_function(0.301,5e6)-test_function(0.300,5e6))/.001
+            test_function = theano.function([mu_testval,log_msqrtR_testval],self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval))
+            jac_mu = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),mu_testval)
+            jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
+            jac_mu_numeric = (test_function(0.301,np.log(5e6))-test_function(0.300,np.log(5e6)))/.001
             assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
 
-            jac_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,msqrtR_testval),msqrtR_testval)
-            jac_msqrtR_analytic = jac_msqrtR.eval({ mu_testval: 0.3, msqrtR_testval: 5e6})
-            jac_msqrtR_numeric = (test_function(0.300,5.01e6)-test_function(0.300,5.00e6))/.01e6
-            assert(np.linalg.norm(jac_msqrtR_analytic-jac_msqrtR_numeric)/np.linalg.norm(jac_msqrtR_analytic) < .05)
+            jac_log_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),log_msqrtR_testval)
+            jac_log_msqrtR_analytic = jac_log_msqrtR.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
+            jac_log_msqrtR_numeric = (test_function(0.300,np.log(5.0e6)+.001)-test_function(0.300,np.log(5.0e6)))/.001
+            assert(np.linalg.norm(jac_log_msqrtR_analytic-jac_log_msqrtR_numeric)/np.linalg.norm(jac_log_msqrtR_analytic) < .05)
 
             
             # Create pymc3 predicted_crackheating expression
-            self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.msqrtR)
-            #self.predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating_op(self.mu,self.msqrtR))
+            self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
+            #self.predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating_op(self.mu,self.log_msqrtR))
             self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
         
             #self.step = pm.Metropolis()
@@ -643,14 +643,15 @@ class estparam(object):
 
             # self.mu is M rows
             self.mu=np.exp(logmu)
-            self.msqrtR = np.exp(logmsqrtR)
-
+            #self.msqrtR = np.exp(logmsqrtR)
+            self.log_msqrtR = logmsqrtR
+            
             #
             # specify the predicted heating from the parameters Lambda (now extracted into mu and msqrtR)... Should be 1 column by N rows. 
             #
             # Create pymc3 predicted_crackheating expression
             self.predict_crackheating_per_specimen_op_instance = predict_crackheating_per_specimen_op(self)
-            self.predicted_crackheating = self.predict_crackheating_per_specimen_op_instance(self.mu,self.msqrtR)
+            self.predicted_crackheating = self.predict_crackheating_per_specimen_op_instance(self.mu,self.log_msqrtR)
 
 
             #
@@ -700,12 +701,12 @@ class estparam(object):
                     theano.config.compute_test_value = "off"
                     # Verify that our op correctly calculates the gradient
                     print("grad_mu_values = %s" % (str(self.predict_crackheating_per_specimen_grad_mu(np.array([0.3]*self.M), np.array([5e6]*self.M)))))
-                    print("grad_msqrtR_values = %s" % (str(self.predict_crackheating_per_specimen_grad_msqrtR(np.array([0.3]*self.M), np.array([5e6]*self.M)))))
+                    print("grad_log_msqrtR_values = %s" % (str(self.predict_crackheating_per_specimen_grad_msqrtR(np.array([0.3]*self.M), np.array([np.log(5e6)]*self.M)))))
 
                     # Test gradient with respect to mu
                     theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_per_specimen_op_instance(mu_val, theano.shared(np.array([5e6]*self.M))) ,[ np.array([0.3]*self.M),],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
                     # Test gradient with respect to msqrtR
-                    theano.tests.unittest_tools.verify_grad(lambda msqrtR_val: self.predict_crackheating_per_specimen_op_instance(theano.shared(np.array([0.3]*self.M)),msqrtR_val) ,[ np.array([5e6]*self.M)],abs_tol=1e-20,rel_tol=1e-8,eps=1.0) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors. 
+                    theano.tests.unittest_tools.verify_grad(lambda log_msqrtR_val: self.predict_crackheating_per_specimen_op_instance(theano.shared(np.array([0.3]*self.M)),log_msqrtR_val) ,[ np.array([np.log(5e6)]*self.M)],abs_tol=1e-20,rel_tol=1e-8,eps=1.0) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors. 
 
                     print("\n\n\nVerify_grad() completed!!!\n\n\n")
                     pass
