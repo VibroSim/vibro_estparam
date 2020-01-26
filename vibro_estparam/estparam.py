@@ -23,7 +23,7 @@ import pymc3 as pm
 import pandas as pd
 from theano.compile.ops import as_op
 
-from crackheat_surrogate.load_surrogate import nonnegative_denormalized_surrogate
+from crackheat_surrogate.load_surrogate import load_dennorm_surrogates_from_jsonfile
 
 
 
@@ -188,8 +188,6 @@ class estparam(object):
     mu=None
     dummy_observed_variable=None
     log_msqrtR=None
-    bending_stress=None
-    dynamic_stress=None
     cracknum=None
     predicted_crackheating=None
     y_like=None  # y_likelihood function; was just "crackheating" 
@@ -246,10 +244,10 @@ class estparam(object):
         stored in the surrogate] are removed. 
         """
 
-        self.crack_surrogates = [ nonnegative_denormalized_surrogate.fromjsonfile(filename) for filename in self.surrogatefiles ]  
+        self.crack_surrogates = [ load_denorm_surrogates_from_jsonfile(filename,nonneg=True) for filename in self.surrogatefiles ]  
 
-        self.crackheatfile_dataframes = [ pd.read_csv(crackheat_file) for crackheat_file in self.crackheatfiles ]
-
+        self.crackheatfile_dataframes = [ pd.read_csv(crackheat_file,dtype={"DynamicNormalStressAmpl (Pa)": str, "DynamicShearStressAmpl (Pa)": str, "BendingStress (Pa)": str}) for crackheat_file in self.crackheatfiles ]
+        
         self.crackheat_table = pd.concat(self.crackheatfile_dataframes,ignore_index=True) # NOTE: Pandas warning about sorting along non-concatenation axis should go away once all data has timestamps
 
 
@@ -261,7 +259,7 @@ class estparam(object):
         self.crackheat_table["specimen_nums"]=specimen_nums
 
         # Look up closure_lowest_avg_load_used from values loaded into surrogate
-        closure_lowest_avg_load_used = np.array([ self.crack_surrogates[specimen_num].closure_lowest_avg_load_used for specimen_num in self.crackheat_table["specimen_nums"].values ])
+        closure_lowest_avg_load_used = np.array([ self.crack_surrogates[specimen_num][list(self.crack_surrogates[specimen_num].keys())[0]].closure_lowest_avg_load_used for specimen_num in self.crackheat_table["specimen_nums"].values ])
         self.crackheat_table["closure_lowest_avg_load_used"]=closure_lowest_avg_load_used
         
         # Drop rows in crackheat_table with NaN ThermalPower
@@ -272,7 +270,7 @@ class estparam(object):
 
         if filter_outside_closure_domain:
             # Drop rows in crackheat_table with bending stress less than closure_lowest_avg_load_used
-            outside_closure_domain_rownums = np.where((~np.isnan(self.crackheat_table["closure_lowest_avg_load_used"].values)) & (self.crackheat_table["closure_lowest_avg_load_used"].values > self.crackheat_table["BendingStress (Pa)"].values))[0]
+            outside_closure_domain_rownums = np.where((~np.isnan(self.crackheat_table["closure_lowest_avg_load_used"].values)) & (self.crackheat_table["closure_lowest_avg_load_used"].values > self.crackheat_table["BendingStress (Pa)"].map(float).values))[0]
             self.crackheat_table.drop(outside_closure_domain_rownums,axis=0,inplace=True)
             self.crackheat_table.reset_index(drop=True,inplace=True)
                                                        
@@ -303,13 +301,16 @@ class estparam(object):
         for index in range(self.crackheat_table.shape[0]):
             #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
 
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
+
+            surrogate_key = "bs_pa_" + crackheatfile_dataframe["BendingStress (Pa)"].iloc(index) + "_dnsa_pa_" + crackheatfile_dataframe["DynamicNormalStressAmpl (Pa)"].iloc(index) + "_dssa_pa_" + crackheatfile_dataframe["DynamicShearStressAmpl (Pa)"].iloc(index)
+
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu,
-                                        "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": log_msqrtR},ignore_index=True)
             
-            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]][surrogate_key].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
         return retval
 
@@ -323,14 +324,16 @@ class estparam(object):
         # Could parallelize this loop!
         for index in range(self.crackheat_table.shape[0]):
             #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
+            surrogate_key = "bs_pa_" + crackheatfile_dataframe["BendingStress (Pa)"].iloc(index) + "_dnsa_pa_" + crackheatfile_dataframe["DynamicNormalStressAmpl (Pa)"].iloc(index) + "_dssa_pa_" + crackheatfile_dataframe["DynamicShearStressAmpl (Pa)"].iloc(index)
 
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
+
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu,
-                                        "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": log_msqrtR},ignore_index=True)
             
-            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate_derivative(datagrid,3,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]][surrogate_key].evaluate_derivative(datagrid,1,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
         return retval
     
@@ -345,15 +348,17 @@ class estparam(object):
         # Could parallelize this loop!
         for index in range(self.crackheat_table.shape[0]):
             #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
+            surrogate_key = "bs_pa_" + crackheatfile_dataframe["BendingStress (Pa)"].iloc(index) + "_dnsa_pa_" + crackheatfile_dataframe["DynamicNormalStressAmpl (Pa)"].iloc(index) + "_dssa_pa_" + crackheatfile_dataframe["DynamicShearStressAmpl (Pa)"].iloc(index)
+
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu,
-                                        "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": log_msqrtR},ignore_index=True)
-            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
+            retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]][surrogate_key].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
         return retval
-
+        
 
         
     def predict_crackheating_per_specimen(self,mu,log_msqrtR):
@@ -366,15 +371,17 @@ class estparam(object):
         for index in range(self.crackheat_table.shape[0]):  # ... going from 0...N-1 -- iterating over all the rows in the data
             specimen_num=self.crackheat_table["specimen_nums"].values[index]
             
+            surrogate_key = "bs_pa_" + crackheatfile_dataframe["BendingStress (Pa)"].iloc(index) + "_dnsa_pa_" + crackheatfile_dataframe["DynamicNormalStressAmpl (Pa)"].iloc(index) + "_dssa_pa_" + crackheatfile_dataframe["DynamicShearStressAmpl (Pa)"].iloc(index)
+            
             #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu[specimen_num],
-                                        "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
             
-            retval[index]=self.crack_surrogates[specimen_num].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
+            retval[index]=self.crack_surrogates[specimen_num][surrogate_key].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
         return retval
 
@@ -389,14 +396,16 @@ class estparam(object):
         for index in range(self.crackheat_table.shape[0]):
             specimen_num=self.crackheat_table["specimen_nums"].values[index]
             #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
+            surrogate_key = "bs_pa_" + crackheatfile_dataframe["BendingStress (Pa)"].iloc(index) + "_dnsa_pa_" + crackheatfile_dataframe["DynamicNormalStressAmpl (Pa)"].iloc(index) + "_dssa_pa_" + crackheatfile_dataframe["DynamicShearStressAmpl (Pa)"].iloc(index)
             
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
+
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu[specimen_num],
-                                        "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
             
-            retval[index,specimen_num]=self.crack_surrogates[specimen_num].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            retval[index,specimen_num]=self.crack_surrogates[specimen_num][surrogate_key].evaluate_derivative(datagrid,0,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
         return retval
 
@@ -412,15 +421,16 @@ class estparam(object):
         for index in range(self.crackheat_table.shape[0]):
             specimen_num=self.crackheat_table["specimen_nums"].values[index]
 
+            surrogate_key = "bs_pa_" + crackheatfile_dataframe["BendingStress (Pa)"].iloc(index) + "_dnsa_pa_" + crackheatfile_dataframe["DynamicNormalStressAmpl (Pa)"].iloc(index) + "_dssa_pa_" + crackheatfile_dataframe["DynamicShearStressAmpl (Pa)"].iloc(index)
             #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
-            datagrid = pd.DataFrame(columns=["mu","bendingstress","dynamicstress","log_msqrtR"])
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
             datagrid = datagrid.append({"mu": mu[specimen_num],
-                                        "bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        "dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
             
-            retval[index,specimen_num]=self.crack_surrogates[specimen_num].evaluate_derivative(datagrid,3,accel_trisolve_devs=self.accel_trisolve_devs)[0]
+            retval[index,specimen_num]=self.crack_surrogates[specimen_num][surrogate_key].evaluate_derivative(datagrid,1,accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
         return retval
     
