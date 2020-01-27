@@ -10,7 +10,8 @@ import pandas as pd
 from matplotlib import pyplot as pl
 from theano.compile.ops import as_op
 
-from crackheat_surrogate.load_surrogate import nonnegative_denormalized_surrogate
+from crackheat_surrogate2.load_surrogate import load_denorm_surrogates_from_jsonfile
+
 
 from vibro_estparam.estparam import estparam
 
