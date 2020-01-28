@@ -710,13 +710,13 @@ class estparam(object):
                     orig_ctv = theano.config.compute_test_value
                     theano.config.compute_test_value = "off"
                     # Verify that our op correctly calculates the gradient
-                    print("grad_mu_values = %s" % (str(self.predict_crackheating_per_specimen_grad_mu(np.array([0.3]*self.M), np.array([5e6]*self.M)))))
-                    print("grad_log_msqrtR_values = %s" % (str(self.predict_crackheating_per_specimen_grad_msqrtR(np.array([0.3]*self.M), np.array([np.log(5e6)]*self.M)))))
+                    print("grad_mu_values = %s" % (str(self.predict_crackheating_per_specimen_grad_mu(np.array([0.3]*self.M), np.array([np.log(5e6)]*self.M)))))
+                    print("grad_log_msqrtR_values = %s" % (str(self.predict_crackheating_per_specimen_grad_log_msqrtR(np.array([0.3]*self.M), np.array([np.log(5e6)]*self.M)))))
 
                     # Test gradient with respect to mu
-                    theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_per_specimen_op_instance(mu_val, theano.shared(np.array([5e6]*self.M))) ,[ np.array([0.3]*self.M),],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
+                    theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_per_specimen_op_instance(mu_val, theano.shared(np.array([np.log(5e6)]*self.M))) ,[ np.array([0.3]*self.M),],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
                     # Test gradient with respect to msqrtR
-                    theano.tests.unittest_tools.verify_grad(lambda log_msqrtR_val: self.predict_crackheating_per_specimen_op_instance(theano.shared(np.array([0.3]*self.M)),log_msqrtR_val) ,[ np.array([np.log(5e6)]*self.M)],abs_tol=1e-20,rel_tol=1e-8,eps=1.0) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors. 
+                    theano.tests.unittest_tools.verify_grad(lambda log_msqrtR_val: self.predict_crackheating_per_specimen_op_instance(theano.shared(np.array([0.3]*self.M)),log_msqrtR_val) ,[ np.array([np.log(5e6)]*self.M)],abs_tol=1e-11,rel_tol=1e-3) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors. 
 
                     print("\n\n\nVerify_grad() completed!!!\n\n\n")
                     pass
