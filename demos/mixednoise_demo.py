@@ -107,6 +107,13 @@ if __name__=="__main__":
     pl.grid()
 
 
-        
+    pl.figure()
+    mnoiserange=np.linspace(0.1,10,100)
+    pl.plot(mnoiserange,np.exp(pm.Lognormal.dist(mu=0.0,sigma=np.median(trace.get_values("sigma_multiplicative"))).logp(mnoiserange).eval()),'-',
+            mnoiserange,np.exp(pm.Lognormal.dist(mu=0.0,sigma=real_sigma_multiplicative).logp(mnoiserange).eval()),'-',)
+    pl.legend(('Based on estimate','Based on actual value of sigma_multiplicative'))'
+    pl.xlabel('Multiplicative factor')
+    pl.ylabel("Probability density")
+    pl.grid()
     pl.show()
 
