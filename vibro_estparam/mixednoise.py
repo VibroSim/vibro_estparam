@@ -31,10 +31,12 @@ class mixednoise_op(gof.Op):
 
     observed = None   # Note that "observed" MUST NOT BE CHANGED unless you clear the evaluation_cache
     evaluation_cache = None
+    inhibit_accel_pid = None # Set this to a pid to prevent acceleration from happening in this pid. Used to prevent openmp parallelism in main process that causes python multiprocessing (used by pymc3) to bork. 
     
-    def __init__(self,observed):
+    def __init__(self,observed,inhibit_accel_pid=None):
 
         self.observed=observed
+        self.inhibit_accel_pid=inhibit_accel_pid
         
         self.itypes = [tt.dscalar,tt.dscalar,tt.dvector] # sigma_additive, sigma_multiplicative, prediction
         self.otypes = [tt.dvector]
@@ -84,7 +86,7 @@ class mixednoise_op(gof.Op):
         # a0n1 ~ lognormal(ln(a0),sigma_multiplicative^2)
         # n2 ~ normal(0,sigma_additive^2)
         res = cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)*( (((observed_indexed-y)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive))
-        print("kernel_dsa_unaccel(%g,%g,%g,%g,%g) returns %g\n" % (y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,res))
+        #print("kernel_dsa_unaccel(%g,%g,%g,%g,%g) returns %g\n" % (y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,res))
         return res
         
 
@@ -195,30 +197,45 @@ class mixednoise_op(gof.Op):
         # where eps presumed small relative to observed.
         eps = observed_indexed/100.0
 
-        bound1=observed_indexed-sigma_additive
-        if bound1 < eps:
-            bound1=eps
-            pass
+        bounds = np.array((eps,
+                           observed_indexed-sigma_additive,
+                           observed_indexed+sigma_additive,
+                           prediction_indexed*np.exp(-sigma_multiplicative),
+                           prediction_indexed*np.exp(sigma_multiplicative)),dtype='d')
+        bounds.sort()
+        bounds[bounds < eps] = eps
         
-        bound2=observed_indexed+sigma_additive
+        assert(bounds.shape[0]==5)
         
         singular_portion = integral_y_zero_to_eps(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps)
+        
         # Break integration into singular portion, portion up to observed value, portion to infinity to help make sure quadrature is accurate.
-        print("Integration from y=%g... %g" % (eps,bound1))
-        (p1,p1err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),eps,bound1,epsabs=3e-15)
-        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(eps,observed_indexed-sigma_additive,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+        #print("Integration from y=%g... %g" % (bounds[0],bounds[1]))
+        (p1,p1err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[0],bounds[1],epsabs=3e-15)
+        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[0],bounds[1],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
 
-        print("Integration from y=%g... %g" % (bound1,bound2))
-        (p2,p2err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bound1,bound2,epsabs=3e-15)
-        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(eps,observed_indexed,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+        #print("Integration from y=%g... %g" % (bounds[1],bounds[2]))
+        (p2,p2err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[1],bounds[2],epsabs=3e-15)
+        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[1],bounds[2],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
 
-        print("Integration from y=%g... inf" % (bound2))
 
-        (p3,p3err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bound2,np.inf,epsabs=1e-24)
-        print("integrate_kernel returns %s from %s, %s, %s, and %s; p1err=%g, p2err=%g,p3err=%g" % (str(singular_portion+p1+p2+p3),str(singular_portion),str(p1),str(p2),str(p3),p1err,p2err,p3err))
+        #print("Integration from y=%g... %g" % (bounds[2],bounds[3]))
+        (p3,p3err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[2],bounds[3],epsabs=3e-15)
+        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[2],bounds[3],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+
+        #print("Integration from y=%g... %g" % (bounds[3],bounds[4]))
+        (p4,p4err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[3],bounds[4],epsabs=3e-15)
+        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[3],bounds[4],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+
+
+        
+        #print("Integration from y=%g... inf" % (bounds[4]))
+
+        (p5,p5err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[4],np.inf,epsabs=1e-24)
+        #print("integrate_kernel returns %s from %s, %s, %s, %s, %s, and %s; p1err=%g, p2err=%g,p3err=%g,p4err=%g,p5err=%g" % (str(singular_portion+p1+p2+p3+p4+p5),str(singular_portion),str(p1),str(p2),str(p3),str(p4),str(p5),p1err,p2err,p3err,p4err,p5err))
         #print("kernel(1,1,1,1,1)=%g" % (kernel(1,1,1,1,1)))
         
-        return singular_portion + p1 + p2 + p3
+        return singular_portion + p1 + p2 + p3 + p4 + p5
 
     def evaluate_p_from_cache(self,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed):
         # Evaluating the baseline probability is required both in each call to perform() and in the
@@ -245,7 +262,7 @@ class mixednoise_op(gof.Op):
 
         logp = np.zeros(self.observed.shape[0],dtype='d')
 
-        if use_accel:
+        if use_accel and self.inhibit_accel_pid != os.getpid():
             p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
                                                                         self.evaluation_cache,
                                                                         sigma_additive,sigma_multiplicative,prediction,self.observed)
@@ -271,7 +288,7 @@ class mixednoise_op(gof.Op):
         # gradient of log p is (1/p) dp
         dlogp = np.zeros(self.observed.shape[0],dtype='d')
 
-        if use_accel:
+        if use_accel and self.inhibit_accel_pid != os.getpid():
             p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
                                                                         self.evaluation_cache,
                                                                         sigma_additive,sigma_multiplicative,prediction,self.observed)
@@ -280,7 +297,7 @@ class mixednoise_op(gof.Op):
 
             
             dlogp =  dp/p
-            print("accel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
+            #print("accel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
             
             pass
         else: 
@@ -295,7 +312,7 @@ class mixednoise_op(gof.Op):
                                            sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
                 dlogp[index] = (1.0/p) * dp
                 pass
-            print("unaccel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
+            #print("unaccel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
 
             pass
         
@@ -307,7 +324,7 @@ class mixednoise_op(gof.Op):
     def grad_sigma_multiplicative(self,sigma_additive,sigma_multiplicative,prediction):
         # gradient of log p is (1/p) dp
         dlogp = np.zeros(self.observed.shape[0],dtype='d')
-        if use_accel:
+        if use_accel and self.inhibit_accel_pid != os.getpid():
             p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
                                                                         self.evaluation_cache,
                                                                         sigma_additive,sigma_multiplicative,prediction,self.observed)
@@ -329,6 +346,8 @@ class mixednoise_op(gof.Op):
                 dlogp[index] = (1.0/p) * dp
                 pass
             pass
+
+        #print("grad_sigma_multiplicative: use_accel=%s p=%s dp=%s dlogp=%s" % (str(use_accel),str(p),str(dp),str(dlogp)))
         #if np.isnan(dlogp).any():
         #    import pdb
         #    pdb.set_trace()
@@ -339,7 +358,7 @@ class mixednoise_op(gof.Op):
         # gradient of log p is (1/p) dp
         dlogp = np.zeros(self.observed.shape[0],dtype='d')
 
-        if use_accel:
+        if use_accel and self.inhibit_accel_pid != os.getpid():
             p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
                                                                         self.evaluation_cache,
                                                                         sigma_additive,sigma_multiplicative,prediction,self.observed)
@@ -413,9 +432,9 @@ def CreateMixedNoise(name,
                      sigma_additive,
                      sigma_multiplicative,
                      prediction,
-                     observed):
+                     observed,inhibit_accel_pid=None):
 
-    MixedNoiseOp=mixednoise_op(observed) 
+    MixedNoiseOp=mixednoise_op(observed,inhibit_accel_pid=inhibit_accel_pid) 
     
     def MixedNoiseLogP(sigma_additive,
                        sigma_multiplicative,

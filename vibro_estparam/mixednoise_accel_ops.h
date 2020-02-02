@@ -113,7 +113,7 @@ static double lognormal_normal_convolution_kernel_deriv_sigma_additive(double *y
 
   
   res = lognormal_normal_convolution_kernel_core(y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)*( ((pow(observed_indexed-y,2.0))/(pow(sigma_additive,3.0))) - (1.0/sigma_additive));
-  fprintf(stderr,"kernel_dsa(%g,%g,%g,%g,%g) returns %g\n", y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,res);
+  //fprintf(stderr,"kernel_dsa(%g,%g,%g,%g,%g) returns %g\n", y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,res);
   return res;
 }
 
@@ -145,6 +145,24 @@ static double lognormal_normal_convolution_kernel_deriv_prediction(double *yp,do
 }
 
 
+int sort_bounds_compar(const void *bound1,const void *bound2)
+{
+  if (*(double *)bound1 > *(double*)bound2) return 1;
+  if (*(double *)bound1 < *(double*)bound2) return -1;
+  return 0;
+}
+static void sort_bounds(double *bounds,double minbound,unsigned n)
+{
+  unsigned cnt;
+  qsort(bounds,n,sizeof(double),sort_bounds_compar);
+
+  for (cnt=0;cnt < n;cnt++) {
+    if (bounds[cnt] < minbound) {
+      bounds[cnt]=minbound;
+    }
+  }
+}
+
 static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution_integral_y_zero_to_eps,D_fp funct, double sigma_additive,double sigma_multiplicative, double prediction_indexed,double observed_indexed,double eps)
 {
   double singular_portion;
@@ -152,9 +170,9 @@ static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution
   double epsrel=1e-16;
   integer inf=1; // infinite integration range corresponding to (bound,+infinity)
   integer limit=50; // following scipy.integrate.quad() (!)
-  double p1=0.0,p2=0.0,p3=0.0;
-  double p1err=0.0,p2err=0.0,p3err;
-  double bound1,bound2;
+  double p1=0.0,p2=0.0,p3=0.0,p4=0.0,p5=0.0;
+  double p1err=0.0,p2err=0.0,p3err=0.0,p4err=0.0,p5err=0.0;
+  double bounds[5];
   integer neval=0,ier=0;
   double *alist;
   double *blist;
@@ -170,16 +188,23 @@ static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution
   
   singular_portion = evaluate_y_zero_to_eps(lognormal_normal_convolution_integral_y_zero_to_eps,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
 
-  bound1=observed_indexed-sigma_additive;
-  if (bound1 < eps) {
-    bound1=eps;
-  }
-  bound2=observed_indexed+sigma_additive;
-  fprintf(stderr,"integrating from %g to %g\n",eps,bound1);
+  bounds[0]=eps;
+  bounds[1]=observed_indexed-sigma_additive;
+  bounds[2]=observed_indexed+sigma_additive;
+  // also got ln y - ln a0 = +- sigma_multiplicative
+  // or ln y = ln_a0 +- sigma_multiplicative
+  // or y = exp(ln(a0) +- sigma_multiplicative
+  // or y = a0*exp(+- sigma_multiplicative
+  bounds[3]=prediction_indexed * exp(-sigma_multiplicative);
+  bounds[4]=prediction_indexed * exp(sigma_multiplicative);
+
+  sort_bounds(bounds,eps,sizeof(bounds)/sizeof(*bounds));
+  
+  //fprintf(stderr,"integrating from %g to %g\n",bounds[0],bounds[1]);
   
   dqagse_mna(funct,
 	  &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	  &eps,&bound1, // integration bounds
+	  &bounds[0],&bounds[1], // integration bounds
 	  &epsabs,&epsrel,
 	  &limit,
 	  &p1,
@@ -190,16 +215,16 @@ static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution
 	  &last);
 
   
-  printf("ier=%d\n",ier);
+  //printf("ier=%d\n",ier);
 
-  printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",eps,bound1,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[0],bounds[1],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
 
 
-  fprintf(stderr,"integrating from %g to %g\n",bound1,bound2);
+  //fprintf(stderr,"integrating from %g to %g\n",bounds[1],bounds[2]);
   
   dqagse_mna(funct,
 	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	     &bound1,&bound2, // integration bounds
+	     &bounds[1],&bounds[2], // integration bounds
 	     &epsabs,&epsrel,
 	     &limit,
 	     &p2,
@@ -210,26 +235,76 @@ static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution
 	     &last);
 
   
-  printf("ier=%d\n",ier);
+  //printf("ier=%d\n",ier);
 
-  printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bound1,bound2,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[1],bounds[2],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
 
+
+
+  
+  //fprintf(stderr,"integrating from %g to %g\n",bounds[2],bounds[3]);
+  
+  dqagse_mna(funct,
+	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	     &bounds[2],&bounds[3], // integration bounds
+	     &epsabs,&epsrel,
+	     &limit,
+	     &p3,
+	     &p3err,
+	     &neval,
+	     &ier,
+	     alist,blist,rlist,elist,iord,
+	     &last);
+
+  
+  //printf("ier=%d\n",ier);
+
+  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[2],bounds[3],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+
+
+
+    
+  //fprintf(stderr,"integrating from %g to %g\n",bounds[3],bounds[4]);
+  
+  dqagse_mna(funct,
+	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	     &bounds[3],&bounds[4], // integration bounds
+	     &epsabs,&epsrel,
+	     &limit,
+	     &p4,
+	     &p4err,
+	     &neval,
+	     &ier,
+	     alist,blist,rlist,elist,iord,
+	     &last);
+
+  
+  //printf("ier=%d\n",ier);
+
+  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[3],bounds[4],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  
+
+
+
+
+
+  
   //fprintf(stderr,"p1err=%g\n",p1err);
   // result from portion 1 stored in p1
   epsabs=1e-24; // following Python code... 
-  fprintf(stderr,"integrating from %g to Inf\n",bound2);
+  //fprintf(stderr,"integrating from %g to Inf\n",bounds[4]);
   
   dqagie_mna(funct,
-	  &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	  &bound2,&inf, // integration bounds
-	  &epsabs,&epsrel,
-	  &limit,
-	  &p3,
-	  &p3err,
-	  &neval,
-	  &ier,
-	  alist,blist,rlist,elist,iord,
-	  &last);
+	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	     &bounds[4],&inf, // integration bounds
+	     &epsabs,&epsrel,
+	     &limit,
+	     &p5,
+	     &p5err,
+	     &neval,
+	     &ier,
+	     alist,blist,rlist,elist,iord,
+	     &last);
   //fprintf(stderr,"p2err=%g\n",p2err);
 
   
@@ -240,13 +315,13 @@ static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution
   free(iord);
 
   /***!!!!*** Should at least inspect ier... */
-  printf("ier=%d\n",ier);
+  //printf("ier=%d\n",ier);
 
-  printf("mnao_integrate_kernel returns %g from %g, %g, %g, and %g; p1err=%g, p2err=%g,p3err=%g\n",(singular_portion+p1+p2+p3),(singular_portion),(p1),(p2),(p3),p1err,p2err,p3err);
+  //printf("mnao_integrate_kernel returns %g from %g, %g, %g, %g, %g and %g; p1err=%g, p2err=%g,p3err=%g,p4err=%g,p5err=%g\n",(singular_portion+p1+p2+p3+p4+p5),(singular_portion),(p1),(p2),(p3),(p4),(p5),p1err,p2err,p3err,p4err,p5err);
   
-  fflush(stdout);
+  //fflush(stdout);
 
-  return singular_portion + p1 + p2 + p3;
+  return singular_portion + p1 + p2 + p3 + p4 + p5;
   
   
 }
@@ -277,7 +352,7 @@ static void integrate_lognormal_normal_convolution_c(PyObject *lognormal_normal_
       
     }
     p[itercnt]=p_value;
-    printf("integrated value %g\n",p_value);
+    //printf("integrated value %g\n",p_value);
   }
 }
 
@@ -335,6 +410,8 @@ static void integrate_deriv_prediction_c(PyObject *lognormal_normal_convolution_
     
     prediction_indexed = prediction[itercnt];
     observed_indexed = observed[itercnt];
+
+    //printf("pid %d omp tid %d\n",getpid(),omp_get_thread_num());
     
     eps = observed_indexed/100.0;
     
