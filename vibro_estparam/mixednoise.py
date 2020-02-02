@@ -28,7 +28,8 @@ class mixednoise_op(gof.Op):
     itypes = None
     otypes = None
 
-    observed = None
+    observed = None   # Note that "observed" MUST NOT BE CHANGED unless you clear the evaluation_cache
+    evaluation_cache = None
     
     def __init__(self,observed):
 
@@ -41,6 +42,8 @@ class mixednoise_op(gof.Op):
         self.grad_sigma_multiplicative_op = as_op(itypes=[tt.dscalar,tt.dscalar,tt.dvector],otypes=[tt.dvector])(self.grad_sigma_multiplicative)
         
         self.grad_prediction_op = as_op(itypes=[tt.dscalar,tt.dscalar,tt.dvector],otypes=[tt.dvector])(self.grad_prediction)
+
+        self.evaluation_cache = {}
         
         pass
         
@@ -194,7 +197,22 @@ class mixednoise_op(gof.Op):
         #print("integrate_kernel returns %s from %s, %s, and %s; p1err=%g, p2err=%g" % (str(singular_portion+p1+p2),str(singular_portion),str(p1),str(p2),p1err,p2err))
         
         return singular_portion + p1 + p2
-    
+
+    def evaluate_p_from_cache(self,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed):
+        # Evaluating the baseline probability is required both in each call to perform() and in the
+        # gradient along each axis. This uses a dictionary as a cache so that they don't need to be
+        # recomputed
+        key = (float(sigma_additive),float(sigma_multiplicative),float(prediction_indexed),float(observed_indexed))
+        if not key in self.evaluation_cache:
+            
+            #p = self.integrate_lognormal_normal_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+            p = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps,
+                                      self.lognormal_normal_convolution_kernel,
+                                      sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+            self.evaluation_cache[key]=p
+            return p 
+        return self.evaluation_cache[key]
+        
         
     def perform(self,node,inputs_storage,outputs_storage):
         (sigma_additive, sigma_multiplicative, prediction) = inputs_storage
@@ -205,10 +223,7 @@ class mixednoise_op(gof.Op):
             prediction_indexed=prediction[index]
             observed_indexed = self.observed[index]
 
-            #p = self.integrate_lognormal_normal_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            p = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps,
-                                      self.lognormal_normal_convolution_kernel,
-                                      sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
             logp[index]=np.log(p)
             
             pass
@@ -223,9 +238,7 @@ class mixednoise_op(gof.Op):
             prediction_indexed=prediction[index]
             observed_indexed = self.observed[index]
             
-            p = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps,
-                                      self.lognormal_normal_convolution_kernel,
-                                      sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
             
             dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,
                                        self.lognormal_normal_convolution_kernel_deriv_sigma_additive,
@@ -245,9 +258,7 @@ class mixednoise_op(gof.Op):
             prediction_indexed=prediction[index]
             observed_indexed = self.observed[index]
             
-            p = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps,
-                                      self.lognormal_normal_convolution_kernel,
-                                      sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
             
             dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,
                                        self.lognormal_normal_convolution_kernel_deriv_sigma_multiplicative,
@@ -268,9 +279,7 @@ class mixednoise_op(gof.Op):
             prediction_indexed=prediction[index]
             observed_indexed = self.observed[index]
             
-            p = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps,
-                                      self.lognormal_normal_convolution_kernel,
-                                      sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
             
             dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,
                                        self.lognormal_normal_convolution_kernel_deriv_prediction,
@@ -382,10 +391,10 @@ if __name__=="__main__":
     MixedNoiseOp=mixednoise_op(observed_samples) 
     
     orig_ctv = theano.config.compute_test_value
-    #theano.config.compute_test_value = "off"
-    theano.config.optimizer="None" # "fast_compile" # disable optimizations
+    theano.config.compute_test_value = "off"
+    #theano.config.optimizer="None" # "fast_compile" # disable optimizations
 
-    theano.config.exception_verbosity="high"
+    #theano.config.exception_verbosity="high"
     
     # Parameters: (sigma_additive, sigma_multiplicative, prediction)
 
