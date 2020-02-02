@@ -12,13 +12,14 @@ import theano
 import theano.tensor as tt
 from theano import gof
 
-check_gradient = False
-if check_gradient:
-    import theano.tests.unittest_tools
+
+use_accel = True
+if use_accel:
+    from . import mixednoise_accel
     pass
 
 import pymc3 as pm
-import pandas as pd
+#import pandas as pd
 from theano.compile.ops import as_op
 from theano.gradient import grad_not_implemented
 
@@ -57,7 +58,9 @@ class mixednoise_op(gof.Op):
         # n1 ~ lognormal(0,sigma_multiplicative^2)
         # a0n1 ~ lognormal(ln(a0),sigma_multiplicative^2)
         # n2 ~ normal(0,sigma_additive^2)
-        return (1.0/(y*sigma_multiplicative*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(y)-np.log(prediction_indexed))**2.0)/(2.0*sigma_multiplicative**2.0))*(1.0/(sigma_additive*np.sqrt(2.0*np.pi)))*np.exp(-((observed_indexed-y)**2.0)/(2.0*sigma_additive**2.0))
+        ret = (1.0/(y*sigma_multiplicative*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(y)-np.log(prediction_indexed))**2.0)/(2.0*sigma_multiplicative**2.0))*(1.0/(sigma_additive*np.sqrt(2.0*np.pi)))*np.exp(-((observed_indexed-y)**2.0)/(2.0*sigma_additive**2.0))
+        #print("kernel(%g,%g,%g,%g,%g) returns %g\n" % (y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,ret))
+        return ret
 
     @staticmethod
     def lognormal_normal_convolution_integral_y_zero_to_eps(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps):
@@ -80,8 +83,10 @@ class mixednoise_op(gof.Op):
         # n1 ~ lognormal(0,sigma_multiplicative^2)
         # a0n1 ~ lognormal(ln(a0),sigma_multiplicative^2)
         # n2 ~ normal(0,sigma_additive^2)
-        return cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)*( (((observed_indexed-y)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive))
-
+        res = cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)*( (((observed_indexed-y)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive))
+        print("kernel_dsa_unaccel(%g,%g,%g,%g,%g) returns %g\n" % (y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,res))
+        return res
+        
 
     @classmethod
     def lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive(cls,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps):
@@ -190,13 +195,30 @@ class mixednoise_op(gof.Op):
         # where eps presumed small relative to observed.
         eps = observed_indexed/100.0
 
-        singular_portion = integral_y_zero_to_eps(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps)
-        # Break integration into singular portion, portion up to observed value, portion to infinity to help make sure quadrature is accurate. 
-        (p1,p1err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),eps,observed_indexed,epsabs=3e-15)
-        (p2,p2err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),observed_indexed,np.inf,epsabs=1e-24)
-        #print("integrate_kernel returns %s from %s, %s, and %s; p1err=%g, p2err=%g" % (str(singular_portion+p1+p2),str(singular_portion),str(p1),str(p2),p1err,p2err))
+        bound1=observed_indexed-sigma_additive
+        if bound1 < eps:
+            bound1=eps
+            pass
         
-        return singular_portion + p1 + p2
+        bound2=observed_indexed+sigma_additive
+        
+        singular_portion = integral_y_zero_to_eps(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps)
+        # Break integration into singular portion, portion up to observed value, portion to infinity to help make sure quadrature is accurate.
+        print("Integration from y=%g... %g" % (eps,bound1))
+        (p1,p1err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),eps,bound1,epsabs=3e-15)
+        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(eps,observed_indexed-sigma_additive,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+
+        print("Integration from y=%g... %g" % (bound1,bound2))
+        (p2,p2err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bound1,bound2,epsabs=3e-15)
+        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(eps,observed_indexed,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+
+        print("Integration from y=%g... inf" % (bound2))
+
+        (p3,p3err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bound2,np.inf,epsabs=1e-24)
+        print("integrate_kernel returns %s from %s, %s, %s, and %s; p1err=%g, p2err=%g,p3err=%g" % (str(singular_portion+p1+p2+p3),str(singular_portion),str(p1),str(p2),str(p3),p1err,p2err,p3err))
+        #print("kernel(1,1,1,1,1)=%g" % (kernel(1,1,1,1,1)))
+        
+        return singular_portion + p1 + p2 + p3
 
     def evaluate_p_from_cache(self,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed):
         # Evaluating the baseline probability is required both in each call to perform() and in the
@@ -206,9 +228,13 @@ class mixednoise_op(gof.Op):
         if not key in self.evaluation_cache:
             
             #p = self.integrate_lognormal_normal_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+
             p = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps,
-                                      self.lognormal_normal_convolution_kernel,
-                                      sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                                          self.lognormal_normal_convolution_kernel,
+                                          sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+        
+            
+            
             self.evaluation_cache[key]=p
             return p 
         return self.evaluation_cache[key]
@@ -219,33 +245,60 @@ class mixednoise_op(gof.Op):
 
         logp = np.zeros(self.observed.shape[0],dtype='d')
 
-        for index in range(self.observed.shape[0]):
-            prediction_indexed=prediction[index]
-            observed_indexed = self.observed[index]
-
-            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            logp[index]=np.log(p)
+        if use_accel:
+            p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
+                                                                        self.evaluation_cache,
+                                                                        sigma_additive,sigma_multiplicative,prediction,self.observed)
             
+            logp=np.log(p)
             pass
+        else:
 
+            for index in range(self.observed.shape[0]):
+                prediction_indexed=prediction[index]
+                observed_indexed = self.observed[index]
+                
+                p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                logp[index]=np.log(p)
+                
+                pass
+            pass
+        
         outputs_storage[0][0]=logp
         pass
 
     def grad_sigma_additive(self,sigma_additive,sigma_multiplicative,prediction):
         # gradient of log p is (1/p) dp
         dlogp = np.zeros(self.observed.shape[0],dtype='d')
-        for index in range(self.observed.shape[0]):
-            prediction_indexed=prediction[index]
-            observed_indexed = self.observed[index]
-            
-            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            
-            dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,
-                                       self.lognormal_normal_convolution_kernel_deriv_sigma_additive,
-                                       sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            dlogp[index] = (1.0/p) * dp
-            pass
 
+        if use_accel:
+            p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
+                                                                        self.evaluation_cache,
+                                                                        sigma_additive,sigma_multiplicative,prediction,self.observed)
+            dp = mixednoise_accel.integrate_deriv_sigma_additive(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,
+                                                                 sigma_additive,sigma_multiplicative,prediction,self.observed)
+
+            
+            dlogp =  dp/p
+            print("accel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
+            
+            pass
+        else: 
+            for index in range(self.observed.shape[0]):
+                prediction_indexed=prediction[index]
+                observed_indexed = self.observed[index]
+            
+                p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                
+                dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,
+                                           self.lognormal_normal_convolution_kernel_deriv_sigma_additive,
+                                           sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                dlogp[index] = (1.0/p) * dp
+                pass
+            print("unaccel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
+
+            pass
+        
         #print("grad_sigma_additive() returns %s from p = %s and dp = %s" % (str(dlogp),str(p),str(dp)))
         
         return dlogp
@@ -254,18 +307,28 @@ class mixednoise_op(gof.Op):
     def grad_sigma_multiplicative(self,sigma_additive,sigma_multiplicative,prediction):
         # gradient of log p is (1/p) dp
         dlogp = np.zeros(self.observed.shape[0],dtype='d')
-        for index in range(self.observed.shape[0]):
-            prediction_indexed=prediction[index]
-            observed_indexed = self.observed[index]
-            
-            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            
-            dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,
-                                       self.lognormal_normal_convolution_kernel_deriv_sigma_multiplicative,
-                                       sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            dlogp[index] = (1.0/p) * dp
-            pass
+        if use_accel:
+            p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
+                                                                        self.evaluation_cache,
+                                                                        sigma_additive,sigma_multiplicative,prediction,self.observed)
+            dp = mixednoise_accel.integrate_deriv_sigma_multiplicative(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,
+                                                                       sigma_additive,sigma_multiplicative,prediction,self.observed)
 
+            dlogp =  dp/p
+            pass
+        else:
+            for index in range(self.observed.shape[0]):
+                prediction_indexed=prediction[index]
+                observed_indexed = self.observed[index]
+                
+                p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                
+                dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,
+                                           self.lognormal_normal_convolution_kernel_deriv_sigma_multiplicative,
+                                           sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                dlogp[index] = (1.0/p) * dp
+                pass
+            pass
         #if np.isnan(dlogp).any():
         #    import pdb
         #    pdb.set_trace()
@@ -275,22 +338,34 @@ class mixednoise_op(gof.Op):
     def grad_prediction(self,sigma_additive,sigma_multiplicative,prediction):
         # gradient of log p is (1/p) dp
         dlogp = np.zeros(self.observed.shape[0],dtype='d')
-        for index in range(self.observed.shape[0]):
-            prediction_indexed=prediction[index]
-            observed_indexed = self.observed[index]
+
+        if use_accel:
+            p = mixednoise_accel.integrate_lognormal_normal_convolution(self.lognormal_normal_convolution_integral_y_zero_to_eps,
+                                                                        self.evaluation_cache,
+                                                                        sigma_additive,sigma_multiplicative,prediction,self.observed)
+            dp = mixednoise_accel.integrate_deriv_prediction(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,
+                                                             sigma_additive,sigma_multiplicative,prediction,self.observed)
             
-            p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            
-            dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,
-                                       self.lognormal_normal_convolution_kernel_deriv_prediction,
-                                       sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
-            dlogp[index] = (1.0/p) * dp
+            dlogp =  dp/p
             pass
-
-        #print("grad_prediction() returns %s from p = %s and dp = %s" % (str(dlogp),str(p),str(dp)))
-
+        else:
+            for index in range(self.observed.shape[0]):
+                prediction_indexed=prediction[index]
+                observed_indexed = self.observed[index]
+                
+                p = self.evaluate_p_from_cache(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                
+                dp = self.integrate_kernel(self.lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,
+                                           self.lognormal_normal_convolution_kernel_deriv_prediction,
+                                           sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
+                dlogp[index] = (1.0/p) * dp
+                pass
+            
+            #print("grad_prediction() returns %s from p = %s and dp = %s" % (str(dlogp),str(p),str(dp)))
+            pass
+    
         return dlogp
-
+        
     
     def grad(self,inputs,output_grads):
         (sigma_additive, sigma_multiplicative, prediction) = inputs
@@ -361,146 +436,4 @@ def CreateMixedNoise(name,
 
                               
 if __name__=="__main__":
-
-    # Some synthetic observed data
-    real_sigma_additive = 22e-3
-    real_sigma_multiplicative = 0.25
-    n=20
-
-    data_logn_mean = np.log(10.0)
-    data_logn_sigma = 2.0
-
-    data_samples = np.random.lognormal(mean=data_logn_mean,sigma=data_logn_sigma,size=n)
-
-    #data_samples=np.array([14.69922805])
-    #data_samples=np.array([0.15086759])
-    
-    # model: observed=coefficient*data_samples
-    # noisy model: observed = additive + coefficient*data_samples*multiplicative
-    real_coefficient = 5.0
-    
-    observed_samples = np.random.normal(loc=0.0,scale=real_sigma_additive,size=n) + data_samples*real_coefficient*np.random.lognormal(mean=0.0,sigma=real_sigma_multiplicative,size=n)
-    #observed_samples = np.array([128.15821403])
-    #observed_samples=np.array([0.6180382])
-    
-    # Verify that integrate_lognormal_normal_kernel() is a pdf over observed_indexed, i.e. that it integrates to 1.0
-    
-    pdf_integral = scipy.integrate.quad(lambda obs: mixednoise_op.integrate_kernel(mixednoise_op.lognormal_normal_convolution_integral_y_zero_to_eps,mixednoise_op.lognormal_normal_convolution_kernel,real_sigma_additive,real_sigma_multiplicative,3.0,obs),.0001,np.inf)[0]
-    print("pdf_integral=%g (should be 1.0)" % (pdf_integral))
-    
-    MixedNoiseOp=mixednoise_op(observed_samples) 
-    
-    orig_ctv = theano.config.compute_test_value
-    theano.config.compute_test_value = "off"
-    #theano.config.optimizer="None" # "fast_compile" # disable optimizations
-
-    #theano.config.exception_verbosity="high"
-    
-    # Parameters: (sigma_additive, sigma_multiplicative, prediction)
-
-    # Evaluation through the Theano Op
-    res=MixedNoiseOp(theano.shared(real_sigma_additive),theano.shared(real_sigma_multiplicative),theano.shared(data_samples*real_coefficient)).eval()
-
-    # Evaluation directly
-    res2=np.array([np.log(mixednoise_op.integrate_kernel(mixednoise_op.lognormal_normal_convolution_integral_y_zero_to_eps,mixednoise_op.lognormal_normal_convolution_kernel,real_sigma_additive,real_sigma_multiplicative,data_sample*real_coefficient,observed_sample)) for (data_sample,observed_sample) in zip(data_samples,observed_samples)])
-
-    #assert((res==res2).all())  # Two evaluations should match exactly
-    
-
-    # Evaluation of derivative:
-    
-    deriv1 = MixedNoiseOp.grad_sigma_additive_op(theano.shared(real_sigma_additive),theano.shared(real_sigma_multiplicative),theano.shared(data_samples*real_coefficient)).eval()
-    deriv2 = MixedNoiseOp.grad_sigma_multiplicative_op(theano.shared(real_sigma_additive),theano.shared(real_sigma_multiplicative),theano.shared(data_samples*real_coefficient)).eval()
-    deriv3 = MixedNoiseOp.grad_prediction_op(theano.shared(real_sigma_additive),theano.shared(real_sigma_multiplicative),theano.shared(data_samples*real_coefficient)).eval()
-
-
-    
-    
-    if check_gradient:
-
-        # WARNING: gradient tests sometimes marginally fail, but this should
-        # not be a problem
-        
-        theano.tests.unittest_tools.verify_grad(lambda sig_add_val: MixedNoiseOp(sig_add_val,theano.shared(real_sigma_multiplicative),theano.shared(data_samples*real_coefficient)) ,[ real_sigma_additive,],abs_tol=1e-4,rel_tol=1e-5,eps=1e-6) 
-
-        theano.tests.unittest_tools.verify_grad(lambda sig_mul_val: MixedNoiseOp(theano.shared(real_sigma_additive),sig_mul_val,theano.shared(data_samples*real_coefficient)) ,[ real_sigma_multiplicative,],abs_tol=1e-12,rel_tol=1e-5) 
-
-        theano.tests.unittest_tools.verify_grad(lambda predict_val: MixedNoiseOp(theano.shared(real_sigma_additive),theano.shared(real_sigma_multiplicative),predict_val) ,[ data_samples*real_coefficient,],abs_tol=1e-12,rel_tol=1e-5,eps=1e-7) 
-
-    
-        theano.tests.unittest_tools.verify_grad(MixedNoiseOp,[real_sigma_additive,real_sigma_multiplicative,data_samples*real_coefficient],abs_tol=1e-12,rel_tol=1e-5) 
-        pass
-
-
-    
-    model=pm.Model()
-
-    with model:
-        sigma_additive_prior_mu = 0.0
-        sigma_additive_prior_sigma = 1.0
-        sigma_multiplicative_prior_mu = np.log(0.5)
-        sigma_multiplicative_prior_sigma = 1.0
-        coefficient_prior_mu = np.log(3.0)
-        coefficient_prior_sigma = 1.0
-        
-        # priors for sigma_additive and sigma_multiplicative
-        sigma_additive = pm.Lognormal("sigma_additive",mu=sigma_additive_prior_mu,sigma=sigma_additive_prior_sigma)
-        sigma_additive_prior=pm.Lognormal.dist(mu=sigma_additive_prior_mu,sigma=sigma_additive_prior_sigma)
-
-        
-        sigma_multiplicative = pm.Lognormal("sigma_multiplicative",mu=sigma_multiplicative_prior_mu,sigma=sigma_multiplicative_prior_sigma)
-        sigma_multiplicative_prior = pm.Lognormal.dist(mu=sigma_multiplicative_prior_mu,sigma=sigma_multiplicative_prior_sigma)
-        
-        
-        coefficient = pm.Lognormal("coefficient",mu=coefficient_prior_mu,sigma=coefficient_prior_sigma)
-        
-        coefficient_prior = pm.Lognormal.dist(mu=coefficient_prior_mu,sigma=coefficient_prior_sigma)
-        
-
-        like = CreateMixedNoise("like",
-                                sigma_additive,
-                                sigma_multiplicative,
-                                data_samples*coefficient,
-                                observed_samples)
-
-
-        step = pm.NUTS()
-        trace = pm.sample(100,step=step,chains=4,cores=4,tune=25)
-        #trace = pm.sample(100,step=step,chains=4,cores=1,tune=25)
-        pass
-
-    from matplotlib import pyplot as pl
-    pm.traceplot(trace)
-    
-    sigma_additive_hist = pl.figure()
-    pl.clf()
-    pl.hist(trace.get_values("sigma_additive"),bins=30,density=True)
-    sa_range=np.linspace(0,pl.axis()[1],100)
-    pl.plot(sa_range,np.exp(sigma_additive_prior.logp(sa_range).eval()),'-')
-    pl.xlabel('sigma_additive')
-    pl.title('median=%f; real value=%f' % (np.median(trace.get_values("sigma_additive")),real_sigma_additive))
-    pl.grid()
-    
-    sigma_multiplicative_hist = pl.figure()
-    pl.clf()
-    pl.hist(trace.get_values("sigma_multiplicative"),bins=30,density=True)
-    sm_range=np.linspace(0,pl.axis()[1],100)
-    pl.plot(sm_range,np.exp(sigma_multiplicative_prior.logp(sm_range).eval()),'-')
-    pl.xlabel('sigma_multiplicative')
-    pl.title('median=%f; real value=%f' % (np.median(trace.get_values("sigma_multiplicative")),real_sigma_multiplicative))
-    pl.grid()
-
-    coefficient_hist = pl.figure()
-    pl.clf()
-    pl.hist(trace.get_values("coefficient"),bins=30,density=True)
-    c_range=np.linspace(0,pl.axis()[1],100)
-    pl.plot(c_range,np.exp(coefficient_prior.logp(c_range).eval()),'-')
-    pl.xlabel('coefficient')
-    pl.title('median=%f; real value=%f' % (np.median(trace.get_values("coefficient")),real_coefficient))
-    pl.grid()
-
-    
-        
-    pl.show()
-        
     pass

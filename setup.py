@@ -9,7 +9,7 @@ from setuptools.command.install_lib import install_lib
 from setuptools.command.install import install
 import setuptools.command.bdist_egg
 import sys
-#from Cython.Build import cythonize
+from Cython.Build import cythonize
 
 
 
@@ -70,14 +70,13 @@ print("version = %s" % (version))
 
 vibro_estparam_package_files = [ "pt_steps/*" ]
 
-#ext_modules=cythonize("vibroestparam/*.pyx")
-ext_modules=[]
+ext_modules=cythonize("vibro_estparam/*.pyx")
 em_dict=dict([ (module.name,module) for module in ext_modules])
-#sca_pyx_ext=em_dict["crackclosuresim2.soft_closure_accel"]
-#sca_pyx_ext.include_dirs=["."]
-##sca_pyx_ext.extra_compile_args=['-O0','-g','-Wno-uninitialized']
-#sca_pyx_ext.extra_compile_args=['-fopenmp','-O5','-Wno-uninitialized']
-#sca_pyx_ext.libraries=['gomp']
+mna_pyx_ext=em_dict["vibro_estparam.mixednoise_accel"]
+mna_pyx_ext.include_dirs=["."]
+#mna_pyx_ext.extra_compile_args=['-O0','-g','-Wno-uninitialized']
+mna_pyx_ext.extra_compile_args=['-fopenmp','-O5','-Wno-uninitialized']
+mna_pyx_ext.libraries=['gomp']
 
 
 
