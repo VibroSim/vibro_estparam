@@ -15,7 +15,8 @@ from theano import gof
 # verified it to be correct.
 
 check_perspecimen_gradient = False
-if check_perspecimen_gradient:
+check_gradient = True
+if check_perspecimen_gradient or check_gradient:
     import theano.tests.unittest_tools
     pass
 
@@ -446,9 +447,18 @@ class estparam(object):
         with self.model:
             #mu = pm.Uniform('mu',lower=0.01,upper=3.0)
             #msqrtR = pm.Uniform('msqrtR',lower=500000,upper=50e6)
+
+            mu_prior_mu = 0.0
+            mu_prior_sigma=1.0
+            self.mu = pm.Lognormal('mu',mu=mu_prior_mu,sigma=mu_prior_sigma)
+            self.mu_prior = = pm.Lognormal.dist(mu=mu_prior_mu,sigma=mu_prior_sigma)
+
+            log_msqrtR_mu=np.log(20e6)
+            log_msqrtR_sigma=1.0
             
-            self.mu = pm.Lognormal('mu',mu=0.0,sigma=1.0)
-            self.log_msqrtR = np.log(pm.Lognormal('msqrtR',mu=np.log(20e6),sigma=1.0))  # !!!*** This might need to be changed.... what is the logarithm of a lognormal distribution??? Is it valid? What about negative numbers???
+            self.log_msqrtR = np.log(pm.Lognormal('msqrtR',mu=log_msqrtR_mu,sigma=log_msqrtR_sigma))  # !!!*** This might need to be changed.... what is the logarithm of a lognormal distribution??? Is it valid? What about negative numbers???
+            self.msqrtR_prior = pm.Lognormal.dist(mu=log_msqrtR_mu,sigma=log_msqrtR_sigma)
+            
 
             # Add in a dummy observed variable that does not interact with the model
             # This is in place because arviz (used for traceplot(), others)
@@ -487,7 +497,7 @@ class estparam(object):
             #self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values)
             #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
             #self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
-
+            
             self.predict_crackheating_op_instance = predict_crackheating_op(self)
 
             # Verify that our op correctly calculates the gradient
@@ -510,12 +520,53 @@ class estparam(object):
             jac_log_msqrtR_numeric = (test_function(0.300,np.log(5.0e6)+.001)-test_function(0.300,np.log(5.0e6)))/.001
             assert(np.linalg.norm(jac_log_msqrtR_analytic-jac_log_msqrtR_numeric)/np.linalg.norm(jac_log_msqrtR_analytic) < .05)
 
+            if check_gradient:
+                try:
+                    orig_ctv = theano.config.compute_test_value
+                    theano.config.compute_test_value = "off"
+                    # Verify that our op correctly calculates the gradient
+                    print("grad_mu_values = %s" % (str(self.predict_crackheating_grad_mu(np.array([0.3]), np.array([5e6])))))
+                    print("grad_log_msqrtR_values = %s" % (str(self.predict_crackheating_grad_msqrtR(np.array([0.3]), np.array([np.log(5e6)])))))
+                    
+                    # Test gradient with respect to mu
+                    theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_per_specimen_op_instance(mu_val, theano.shared(5e6)) ,[ 0.3],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
+                    # Test gradient with respect to msqrtR
+                    theano.tests.unittest_tools.verify_grad(lambda log_msqrtR_val: self.predict_crackheating_per_specimen_op_instance(theano.shared(0.3),log_msqrtR_val) ,[ np.log(5e6) ],abs_tol=1e-20,rel_tol=1e-8,eps=1.0) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors.
+                    # Test combined gradient
+                    theano.tests.unittest_tools.verify_grad(self.predict_crackheating_per_specimen_op_instance,[ 0.3, np.log(5e6) ],abs_tol=1e-20,rel_tol=1e-8,eps=1.0) 
+                    print("\n\n\nVerify_grad() completed!!!\n\n\n")
+                    pass
+                finally:
+                    theano.config.compute_test_value = orig_ctv
+                    pass
+                pass
+
+            
             
             # Create pymc3 predicted_crackheating expression
             self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
             #self.predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating_op(self.mu,self.log_msqrtR))
-            self.crackheating = pm.Normal('crackheating', mu=self.predicted_crackheating, sigma=1e-9, observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values) # ,shape=specimen_nums.shape[0])
+
+            #sigma_additive_prior_mu = 0.0
+            sigma_additive_prior_sigma = 5.0e-8
+            sigma_multiplicative_prior_mu = np.log(0.5)
+            sigma_multiplicative_prior_sigma = 1.0
+            
+            # priors for sigma_additive and sigma_multiplicative
+            sigma_additive = pm.HalfNormal("sigma_additive",sigma=sigma_additive_prior_sigma)
+            sigma_additive_prior=pm.HalfNormal.dist(sigma=sigma_additive_prior_sigma)
+            
+            sigma_multiplicative = pm.Lognormal("sigma_multiplicative",mu=sigma_multiplicative_prior_mu,sigma=sigma_multiplicative_prior_sigma)
+            sigma_multiplicative_prior = pm.Lognormal.dist(mu=sigma_multiplicative_prior_mu,sigma=sigma_multiplicative_prior_sigma)
         
+            
+            self.like = CreateMixedNoise('crackheating',
+                                         sigma_additive,
+                                         sigma_multiplicative,
+                                         prediction=self.predicted_crackheating,
+                                         observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
+                                         inhibit_accel_pid=os.getpid()) # ,shape=specimen_nums.shape[0])
+            
             #self.step = pm.Metropolis()
             self.step=pm.NUTS()
             self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune) # discard_tuned_samples=False,tune=0)

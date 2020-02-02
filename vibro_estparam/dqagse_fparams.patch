@@ -1,0 +1,29 @@
+--- dqagse_fparams.c.orig	2020-02-01 22:43:11.588382021 -0600
++++ dqagse_fparams.c	2020-02-01 22:44:30.103377368 -0600
+@@ -10,7 +10,7 @@
+ 		http://www.netlib.org/f2c/libf2c.zip
+ */
+ 
+-#include "f2c.h"
++//#include "f2c.h"
+ 
+ /* Table of constant values */
+ 
+@@ -328,7 +328,7 @@
+     if (*limit == 1) {
+ 	*ier = 1;
+     }
+-    if (*ier != 0 || *abserr <= errbnd && *abserr != resabs || *abserr == 0.) 
++    if (*ier != 0 || (*abserr <= errbnd && *abserr != resabs) || *abserr == 0.) 
+ 	    {
+ 	goto L140;
+     }
+@@ -944,7 +944,7 @@
+     if (*limit == 1) {
+ 	*ier = 1;
+     }
+-    if (*ier != 0 || *abserr <= errbnd && *abserr != resabs || *abserr == 0.) 
++    if (*ier != 0 || (*abserr <= errbnd && *abserr != resabs) || *abserr == 0.) 
+ 	    {
+ 	goto L130;
+     }

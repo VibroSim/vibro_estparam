@@ -161,6 +161,7 @@ def scriptify(callable):
     # a processtrak step. Do this by inspecting the stack:
     context = None
     try: 
+        stackframe=None
         stacktrace = inspect.stack()
         for stackcnt in range(1,len(stacktrace)):
             stackframe=stacktrace[stackcnt][0]
