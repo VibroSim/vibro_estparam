@@ -7,6 +7,7 @@ import re
 import numpy as np
 import theano
 import theano.tensor as tt
+from theano.printing import Print
 from theano import gof
 #from theano import pp
 
@@ -214,7 +215,10 @@ class estparam(object):
     sigma_additive = None
     sigma_multiplicative = None
 
+    MixedNoiseOp = None
+
     # prior/parameters
+    crackheat_scalefactor = None # Scaling factor multiplied by  heating in Joules/Cycle (or W/Hz) to get values in the model
     mu_prior_mu = None
     mu_prior_sigma = None
     mu_prior = None
@@ -465,15 +469,16 @@ class estparam(object):
             #mu = pm.Uniform('mu',lower=0.01,upper=3.0)
             #msqrtR = pm.Uniform('msqrtR',lower=500000,upper=50e6)
 
+            self.crackheat_scalefactor=1e10
             self.mu_prior_mu = 0.0
             self.mu_prior_sigma=1.0
-            self.mu = pm.Lognormal('mu',mu=self.mu_prior_mu,sigma=self.mu_prior_sigma)
+            self.mu = Print('mu')(pm.Lognormal('mu',mu=self.mu_prior_mu,sigma=self.mu_prior_sigma))
             self.mu_prior = pm.Lognormal.dist(mu=self.mu_prior_mu,sigma=self.mu_prior_sigma)
 
             self.msqrtR_prior_mu=np.log(20e6)
             self.msqrtR_prior_sigma=1.0
             
-            self.log_msqrtR = np.log(pm.Lognormal('msqrtR',mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma))  # !!!*** This might need to be changed.... what is the logarithm of a lognormal distribution??? Is it valid? What about negative numbers???
+            self.log_msqrtR = np.log(Print('msqrtR')(pm.Lognormal('msqrtR',mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)))  # !!!*** This might need to be changed.... what is the logarithm of a lognormal distribution??? Is it valid? What about negative numbers???
             self.msqrtR_prior = pm.Lognormal.dist(mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)
             
 
@@ -517,27 +522,27 @@ class estparam(object):
             
             self.predict_crackheating_op_instance = predict_crackheating_op(self)
 
-            # Verify that our op correctly calculates the gradient
-            #theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ np.array(0.3), np.array(5e6)]) # mu=0.3, msqrtR=5e6
-
-            mu_testval = tt.dscalar('mu_testval')
-            mu_testval.tag.test_value = 0.3 # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
-            
-            log_msqrtR_testval = tt.dscalar('log_msqrtR_testval')
-            log_msqrtR_testval.tag.test_value = np.log(5e6) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
-
-            test_function = theano.function([mu_testval,log_msqrtR_testval],self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval))
-            jac_mu = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),mu_testval)
-            jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
-            jac_mu_numeric = (test_function(0.301,np.log(5e6))-test_function(0.300,np.log(5e6)))/.001
-            assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
-
-            jac_log_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),log_msqrtR_testval)
-            jac_log_msqrtR_analytic = jac_log_msqrtR.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
-            jac_log_msqrtR_numeric = (test_function(0.300,np.log(5.0e6)+.001)-test_function(0.300,np.log(5.0e6)))/.001
-            assert(np.linalg.norm(jac_log_msqrtR_analytic-jac_log_msqrtR_numeric)/np.linalg.norm(jac_log_msqrtR_analytic) < .05)
-
             if check_gradient:
+                # Verify that our op correctly calculates the gradient
+                #theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ np.array(0.3), np.array(5e6)]) # mu=0.3, msqrtR=5e6
+
+                mu_testval = tt.dscalar('mu_testval')
+                mu_testval.tag.test_value = 0.3 # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+            
+                log_msqrtR_testval = tt.dscalar('log_msqrtR_testval')
+                log_msqrtR_testval.tag.test_value = np.log(5e6) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
+
+                test_function = theano.function([mu_testval,log_msqrtR_testval],self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval))
+                jac_mu = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),mu_testval)
+                jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
+                jac_mu_numeric = (test_function(0.301,np.log(5e6))-test_function(0.300,np.log(5e6)))/.001
+                assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
+                
+                jac_log_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),log_msqrtR_testval)
+                jac_log_msqrtR_analytic = jac_log_msqrtR.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
+                jac_log_msqrtR_numeric = (test_function(0.300,np.log(5.0e6)+.001)-test_function(0.300,np.log(5.0e6)))/.001
+                assert(np.linalg.norm(jac_log_msqrtR_analytic-jac_log_msqrtR_numeric)/np.linalg.norm(jac_log_msqrtR_analytic) < .05)
+
                 try:
                     orig_ctv = theano.config.compute_test_value
                     theano.config.compute_test_value = "off"
@@ -561,28 +566,28 @@ class estparam(object):
             
             
             # Create pymc3 predicted_crackheating expression
-            self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
-            #self.predicted_crackheating = pm.Deterministic('predicted_crackheating',predict_crackheating_op(self.mu,self.log_msqrtR))
+            #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
+            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR))
 
             #sigma_additive_prior_mu = 0.0
-            self.sigma_additive_prior_sigma = 5.0e-8
-            self.sigma_multiplicative_prior_mu = np.log(0.5)
-            self.sigma_multiplicative_prior_sigma = 1.0
+            self.sigma_additive_prior_sigma = 2.0e-5*self.crackheat_scalefactor
+            self.sigma_multiplicative_prior_mu = 0.0 #np.log(0.5)
+            self.sigma_multiplicative_prior_sigma = 0.25
             
             # priors for sigma_additive and sigma_multiplicative
-            self.sigma_additive = pm.HalfNormal("sigma_additive",sigma=self.sigma_additive_prior_sigma)
+            self.sigma_additive = Print('sigma_additive')(pm.HalfNormal("sigma_additive",sigma=self.sigma_additive_prior_sigma))
             self.sigma_additive_prior=pm.HalfNormal.dist(sigma=self.sigma_additive_prior_sigma)
             
-            self.sigma_multiplicative = pm.Lognormal("sigma_multiplicative",mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma)
+            self.sigma_multiplicative = Print('sigma_multiplicative')(pm.Lognormal("sigma_multiplicative",mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma))
             self.sigma_multiplicative_prior = pm.Lognormal.dist(mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma)
         
             
-            self.y_like = CreateMixedNoise('y_like',
-                                           self.sigma_additive,
-                                           self.sigma_multiplicative,
-                                           prediction=self.predicted_crackheating,
-                                           observed=self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
-                                           inhibit_accel_pid=os.getpid()) # ,shape=specimen_nums.shape[0])
+            (self.MixedNoiseOp,self.y_like) = CreateMixedNoise('y_like',
+                                                               self.sigma_additive,
+                                                               self.sigma_multiplicative,
+                                                               prediction=self.predicted_crackheating*self.crackheat_scalefactor,
+                                                               observed=self.crackheat_scalefactor*self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
+                                                               inhibit_accel_pid=os.getpid()) # ,shape=specimen_nums.shape[0])
             
             #self.step = pm.Metropolis()
             self.step=pm.NUTS()
@@ -593,7 +598,7 @@ class estparam(object):
 
 
     
-    def plot_and_estimate(self,mu_zone=(0.05,0.5),msqrtR_zone=(.36e8,.43e8),marginal_bins=50,joint_bins=(230,200)):
+    def plot_and_estimate(self,mu_zone=(0.05,1.5),msqrtR_zone=(1e6,.100e6),marginal_bins=50,joint_bins=(230,200)):
         """ Create diagnostic histograms. Also return coordinates of 
         joint histogram peak as estimates of mu and msqrtR"""
 
@@ -601,8 +606,15 @@ class estparam(object):
         import cycler
 
         #traceplots=pl.figure()
-        traceplot_axes = pm.traceplot(self.trace)
-        traceplots = traceplot_axes[0,0].figure
+
+        # Current arviz traceplots do not work because of attempt to access 'observed' member 
+        #     https://discourse.pymc.io/t/pm-traceplot-error/3524/8
+        #     https://github.com/arviz-devs/arviz/pull/731
+        # ... Attempted to apply patch to installed copy, but it did not help
+        #traceplot_axes = pm.traceplot(self.trace)
+        #traceplots = traceplot_axes[0,0].figure
+        
+        traceplots = None
 
         mu_vals=self.trace.get_values("mu")
         msqrtR_vals = self.trace.get_values("msqrtR")
@@ -665,7 +677,14 @@ class estparam(object):
         pl.ylabel('Actual heating from experiment (mW)')
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
         pl.grid()
+
+
+        # self.MixedNoiseOp(theano.shared(self.trace.get_values("sigma_additive")[0]),theano.shared(self.trace.get_values("sigma_multiplicative")[0]),theano.shared(self.trace.get_values("predicted_crackheating")[0,:])).eval() ... gives log(p) = 10
+        # self.MixedNoiseOp.evaluate_p_from_cache(self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,0],self.MixedNoiseOp.observed[0])
         
+        pdf_integral = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,0],obs),.0001,np.inf)[0]
+
+
         return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
 
 

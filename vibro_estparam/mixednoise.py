@@ -443,13 +443,13 @@ def CreateMixedNoise(name,
         return MixedNoiseOp(sigma_additive,sigma_multiplicative,prediction)
     
     
-    return pm.DensityDist(name,
-                          MixedNoiseLogP,
-                          observed={
-                              "sigma_additive": sigma_additive,
-                              "sigma_multiplicative": sigma_multiplicative,
-                              "prediction": prediction
-                              })
+    return (MixedNoiseOp,pm.DensityDist(name,
+                                        MixedNoiseLogP,
+                                        observed={
+                                            "sigma_additive": sigma_additive,
+                                            "sigma_multiplicative": sigma_multiplicative,
+                                            "prediction": prediction
+                                        }))
 
                               
 

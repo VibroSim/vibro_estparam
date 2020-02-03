@@ -19,7 +19,7 @@ if __name__=="__main__":
 
     # Some synthetic observed data
     real_sigma_additive = 22e-3
-    real_sigma_multiplicative = 0.25
+    real_sigma_multiplicative = 0.15
     n=20 # 20
     
     data_logn_mean = np.log(10.0)
@@ -44,8 +44,8 @@ if __name__=="__main__":
     with model:
         sigma_additive_prior_mu = 0.0
         sigma_additive_prior_sigma = 1.0
-        sigma_multiplicative_prior_mu = np.log(0.5)
-        sigma_multiplicative_prior_sigma = 1.0
+        sigma_multiplicative_prior_mu = 0.0 #np.log(0.5)
+        sigma_multiplicative_prior_sigma = 0.25 # 1.0
         coefficient_prior_mu = np.log(3.0)
         coefficient_prior_sigma = 1.0
     
@@ -63,12 +63,12 @@ if __name__=="__main__":
         coefficient_prior = pm.Lognormal.dist(mu=coefficient_prior_mu,sigma=coefficient_prior_sigma)
     
     
-        like = CreateMixedNoise("like",
-                                sigma_additive,
-                                sigma_multiplicative,
-                                data_samples*coefficient,
-                                observed_samples,
-                                inhibit_accel_pid=os.getpid())
+        (MixedNoiseOp,like) = CreateMixedNoise("like",
+                                               sigma_additive,
+                                               sigma_multiplicative,
+                                               data_samples*coefficient,
+                                               observed_samples,
+                                               inhibit_accel_pid=os.getpid())
         
         
         step = pm.NUTS()
