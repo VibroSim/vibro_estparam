@@ -1,6 +1,9 @@
 from cpython cimport PyObject
 from cpython.ref cimport Py_INCREF
-from cpython.ceval cimport PyEval_InitThreads
+#from cpython.ceval cimport PyEval_InitThreads
+cdef extern from "Python.h":
+     void PyEval_InitThreads()
+     pass
 import numpy as np
  
 cimport numpy as np
