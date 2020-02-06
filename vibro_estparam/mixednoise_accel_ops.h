@@ -345,13 +345,19 @@ static void integrate_lognormal_normal_convolution_c(PyObject *lognormal_normal_
     //double one=1.0;
     
     //printf("kernel(1,1,1,1,1)=%g\n",lognormal_normal_convolution_kernel(&one,&one,&one,&one,&one));
+    if (evaluation_cache) {    
     
-    p_value = cachelookup(evaluation_cache,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed);
-    if (isnan(p_value)) {
-      // cache lookup failed: Calculate!
+      p_value = cachelookup(evaluation_cache,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed);
+      if (isnan(p_value)) {
+	// cache lookup failed: Calculate!
+	p_value = integrate_convolution_c_one(lognormal_normal_convolution_integral_y_zero_to_eps,lognormal_normal_convolution_kernel,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+	cacheadd(evaluation_cache,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,p_value);
+	
+      }
+    } else {
+      // cache not available
       p_value = integrate_convolution_c_one(lognormal_normal_convolution_integral_y_zero_to_eps,lognormal_normal_convolution_kernel,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
-      cacheadd(evaluation_cache,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,p_value);
-      
+
     }
     p[itercnt]=p_value;
     //printf("integrated value %g\n",p_value);

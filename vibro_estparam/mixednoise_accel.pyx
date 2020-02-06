@@ -70,6 +70,11 @@ def integrate_lognormal_normal_convolution(object lognormal_normal_convolution_i
 
     lognormal_normal_convolution_integral_y_zero_to_eps_c = <PyObject *>lognormal_normal_convolution_integral_y_zero_to_eps
     evaluation_cache_c = <PyObject *>evaluation_cache
+
+    if evaluate_cache is None:
+        evaluation_cache_c = <PyObject *>NULL
+        pass
+    
     lim=prediction.shape[0]
     if lim != observed.shape[0]:
         raise ValueError("prediction and observed must be of same shape (%d vs %d)" % (prediction.shape[0],observed.shape[0]))
