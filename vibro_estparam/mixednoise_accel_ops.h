@@ -201,87 +201,89 @@ static double integrate_convolution_c_one(PyObject *lognormal_normal_convolution
   sort_bounds(bounds,eps,sizeof(bounds)/sizeof(*bounds));
   
   //fprintf(stderr,"integrating from %g to %g\n",bounds[0],bounds[1]);
-  
-  dqagse_mna(funct,
-	  &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	  &bounds[0],&bounds[1], // integration bounds
-	  &epsabs,&epsrel,
-	  &limit,
-	  &p1,
-	  &p1err,
-	  &neval,
-	  &ier,
-	  alist,blist,rlist,elist,iord,
-	  &last);
 
-  
-  //printf("ier=%d\n",ier);
+  if (bounds[0] < bounds[1]) {
+    dqagse_mna(funct,
+	       &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	       &bounds[0],&bounds[1], // integration bounds
+	       &epsabs,&epsrel,
+	       &limit,
+	       &p1,
+	       &p1err,
+	       &neval,
+	       &ier,
+	       alist,blist,rlist,elist,iord,
+	       &last);
+    
+    
+    //printf("ier=%d\n",ier);
 
-  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[0],bounds[1],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
-
+    //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[0],bounds[1],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  }
 
   //fprintf(stderr,"integrating from %g to %g\n",bounds[1],bounds[2]);
   
-  dqagse_mna(funct,
-	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	     &bounds[1],&bounds[2], // integration bounds
-	     &epsabs,&epsrel,
-	     &limit,
-	     &p2,
-	     &p2err,
-	     &neval,
-	     &ier,
-	     alist,blist,rlist,elist,iord,
-	     &last);
-
+  if (bounds[1] < bounds[2]) {
+    dqagse_mna(funct,
+	       &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	       &bounds[1],&bounds[2], // integration bounds
+	       &epsabs,&epsrel,
+	       &limit,
+	       &p2,
+	       &p2err,
+	       &neval,
+	       &ier,
+	       alist,blist,rlist,elist,iord,
+	       &last);
+    
   
-  //printf("ier=%d\n",ier);
+    //printf("ier=%d\n",ier);
+    
+    //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[1],bounds[2],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
 
-  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[1],bounds[2],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
-
-
+  }
 
   
   //fprintf(stderr,"integrating from %g to %g\n",bounds[2],bounds[3]);
+  if (bounds[2] < bounds[3]) {
+    dqagse_mna(funct,
+	       &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	       &bounds[2],&bounds[3], // integration bounds
+	       &epsabs,&epsrel,
+	       &limit,
+	       &p3,
+	       &p3err,
+	       &neval,
+	       &ier,
+	       alist,blist,rlist,elist,iord,
+	       &last);
   
-  dqagse_mna(funct,
-	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	     &bounds[2],&bounds[3], // integration bounds
-	     &epsabs,&epsrel,
-	     &limit,
-	     &p3,
-	     &p3err,
-	     &neval,
-	     &ier,
-	     alist,blist,rlist,elist,iord,
-	     &last);
-
+    //printf("ier=%d\n",ier);
   
-  //printf("ier=%d\n",ier);
-
-  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[2],bounds[3],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+    //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[2],bounds[3],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  }
 
 
 
     
   //fprintf(stderr,"integrating from %g to %g\n",bounds[3],bounds[4]);
-  
-  dqagse_mna(funct,
-	     &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
-	     &bounds[3],&bounds[4], // integration bounds
-	     &epsabs,&epsrel,
-	     &limit,
-	     &p4,
-	     &p4err,
-	     &neval,
-	     &ier,
-	     alist,blist,rlist,elist,iord,
-	     &last);
-
-  
-  //printf("ier=%d\n",ier);
-
-  //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[3],bounds[4],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  if (bounds[3] < bounds[4]) {
+    dqagse_mna(funct,
+	       &sigma_additive,&sigma_multiplicative,&prediction_indexed,&observed_indexed,
+	       &bounds[3],&bounds[4], // integration bounds
+	       &epsabs,&epsrel,
+	       &limit,
+	       &p4,
+	       &p4err,
+	       &neval,
+	       &ier,
+	       alist,blist,rlist,elist,iord,
+	       &last);
+    
+    
+    //printf("ier=%d\n",ier);
+    //printf("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g,er=%g\n",bounds[3],bounds[4],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,epsabs,epsrel);
+  }
   
 
 
@@ -361,7 +363,7 @@ static void integrate_lognormal_normal_convolution_c(PyObject *lognormal_normal_
 static void integrate_deriv_sigma_additive_c(PyObject *lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,double sigma_additive,double sigma_multiplicative, double *prediction,double *observed,double *dp,unsigned n)
 {
   unsigned itercnt;
-#pragma omp parallel for shared(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,sigma_additive,sigma_multiplicative,prediction,observed,dp,n) default(none) private(itercnt)
+#pragma omp parallel for shared(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,sigma_additive,sigma_multiplicative,prediction,observed,dp,n,stderr) default(none) private(itercnt)
   for(itercnt=0;itercnt < n;itercnt++) {
     double prediction_indexed,observed_indexed;
     double dp_value;
@@ -373,6 +375,16 @@ static void integrate_deriv_sigma_additive_c(PyObject *lognormal_normal_convolut
     eps = observed_indexed/100.0;
     
     dp_value = integrate_convolution_c_one(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_additive,lognormal_normal_convolution_kernel_deriv_sigma_additive,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+    if (isnan(dp_value) || !isfinite(dp_value)) {
+      fprintf(stderr,"idsac: got dp_value NaN, sa=%g sm=%g pi=%g oi=%g eps=%g\n",sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+      if (fabs(sigma_additive) < 1e-20 || fabs(sigma_multiplicative) < 1e-20)  {
+	// off the meaningful domain... but sampler seems to get here sometimes during tuning
+	dp_value=0.0;
+      } else {
+	assert(0);
+      }
+    }
+
     dp[itercnt]=dp_value;
   }
 }
@@ -381,7 +393,7 @@ static void integrate_deriv_sigma_additive_c(PyObject *lognormal_normal_convolut
 static void integrate_deriv_sigma_multiplicative_c(PyObject *lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,double sigma_additive,double sigma_multiplicative, double *prediction,double *observed,double *dp,unsigned n)
 {
   unsigned itercnt;
-#pragma omp parallel for shared(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,sigma_additive,sigma_multiplicative,prediction,observed,dp,n) default(none) private(itercnt)
+#pragma omp parallel for shared(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,sigma_additive,sigma_multiplicative,prediction,observed,dp,n,stderr) default(none) private(itercnt)
   for(itercnt=0;itercnt < n;itercnt++) {
     double prediction_indexed,observed_indexed;
     double dp_value;
@@ -393,6 +405,20 @@ static void integrate_deriv_sigma_multiplicative_c(PyObject *lognormal_normal_co
     eps = observed_indexed/100.0;
     
     dp_value = integrate_convolution_c_one(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative,lognormal_normal_convolution_kernel_deriv_sigma_multiplicative,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+    if (isnan(dp_value) || !isfinite(dp_value)) {
+      if (prediction_indexed != 0.0) {
+	fprintf(stderr,"idsmc: got dp_value NaN, sa=%g sm=%g pi=%g oi=%g eps=%g\n",sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+	if (fabs(sigma_additive) < 1e-20 || fabs(sigma_multiplicative) < 1e-20)  {
+	  // off the meaningful domain... but sampler seems to get here sometimes during tuning
+	  dp_value=0.0;
+	} else {
+	  assert(prediction_indexed==0.0); // know this happens in this case and it's OK because the exponential from the convolution makes the derivative zero
+	  // fail!
+	}
+
+      }
+      dp_value=0.0;
+    }
     dp[itercnt]=dp_value;
   }
 }
@@ -402,7 +428,7 @@ static void integrate_deriv_sigma_multiplicative_c(PyObject *lognormal_normal_co
 static void integrate_deriv_prediction_c(PyObject *lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,double sigma_additive,double sigma_multiplicative, double *prediction,double *observed,double *dp,unsigned n)
 {
   unsigned itercnt;
-#pragma omp parallel for shared(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,sigma_additive,sigma_multiplicative,prediction,observed,dp,n) default(none) private(itercnt)
+#pragma omp parallel for shared(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,sigma_additive,sigma_multiplicative,prediction,observed,dp,n,stderr) default(none) private(itercnt)
   for(itercnt=0;itercnt < n;itercnt++) {
     double prediction_indexed,observed_indexed;
     double dp_value;
@@ -416,6 +442,22 @@ static void integrate_deriv_prediction_c(PyObject *lognormal_normal_convolution_
     eps = observed_indexed/100.0;
     
     dp_value = integrate_convolution_c_one(lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction,lognormal_normal_convolution_kernel_deriv_prediction,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+
+    if (isnan(dp_value) || !isfinite(dp_value)) {
+      if (prediction_indexed != 0.0) {
+	fprintf(stderr,"idpc: got dp_value NaN, sa=%g sm=%g pi=%g oi=%g eps=%g\n",sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps);
+
+	if (fabs(sigma_additive) < 1e-20 || fabs(sigma_multiplicative) < 1e-20)  {
+	  // off the meaningful domain... but sampler seems to get here sometimes during tuning
+	  dp_value=0.0;
+	} else {
+	  
+	  assert(prediction_indexed==0.0); 
+	}
+      }
+      dp_value=0.0; // know this happens in the prediction_indexed==0.0 case and it's OK because the exponential from the convolution makes the derivative zero
+    }
+
     dp[itercnt]=dp_value;
   }
 }

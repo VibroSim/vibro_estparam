@@ -4,6 +4,8 @@ import os.path
 import glob
 import collections
 import re
+import scipy
+import scipy.integrate
 import numpy as np
 import theano
 import theano.tensor as tt
@@ -225,6 +227,7 @@ class estparam(object):
     msqrtR_prior_mu = None
     msqrtR_prior_sigma = None
     msqrtR_prior = None
+    #predicted_crackheating_lower_bound = None # negligible value added to predicted crackheating values. 
     sigma_additive_prior_sigma = None
     sigma_additive_prior = None
     sigma_multiplicative_prior_mu = None
@@ -349,7 +352,7 @@ class estparam(object):
             surrogate_key = "bs_pa_" + self.crackheat_table["BendingStress (Pa)"].iloc[index] + "_dnsa_pa_" + self.crackheat_table["DynamicNormalStressAmpl (Pa)"].iloc[index] + "_dssa_pa_" + self.crackheat_table["DynamicShearStressAmpl (Pa)"].iloc[index]
 
 
-            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]).astype({"mu":np.float64,"log_msqrtR":np.float64})
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]) # .astype({"mu":np.float64,"log_msqrtR":np.float64})
             datagrid = datagrid.append({"mu": float(mu),
                                         #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
@@ -372,13 +375,16 @@ class estparam(object):
             #datagrid=np.array(((mu,self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR),),dtype='d')
             surrogate_key = "bs_pa_" + self.crackheat_table["BendingStress (Pa)"].iloc[index] + "_dnsa_pa_" + self.crackheat_table["DynamicNormalStressAmpl (Pa)"].iloc[index] + "_dssa_pa_" + self.crackheat_table["DynamicShearStressAmpl (Pa)"].iloc[index]
 
-            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]).astype({"mu":np.float64,"log_msqrtR":np.float64})
+            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]) #.astype({"mu":np.float64,"log_msqrtR":np.float64})
             datagrid = datagrid.append({"mu": float(mu),
                                         #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": float(log_msqrtR)},ignore_index=True)
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]][surrogate_key].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
+            if not np.isfinite(retval[index]):
+                raise ValueError("Surrogate %s for specimen #%d evaluated to %g at %s" % (surrogate_key,self.crackheat_table["specimen_nums"].values[index],retval[index],str(datagrid)))
             pass
+
         return retval
         
 
@@ -398,10 +404,10 @@ class estparam(object):
             #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
             datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
-            datagrid = datagrid.append({"mu": mu[specimen_num],
+            datagrid = datagrid.append({"mu": float(mu[specimen_num]),
                                         #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
+                                        "log_msqrtR": float(log_msqrtR[specimen_num])},ignore_index=True)
             
             retval[index]=self.crack_surrogates[specimen_num][surrogate_key].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             pass
@@ -422,10 +428,10 @@ class estparam(object):
             
 
             datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
-            datagrid = datagrid.append({"mu": mu[specimen_num],
+            datagrid = datagrid.append({"mu": float(mu[specimen_num]),
                                         #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
+                                        "log_msqrtR": float(log_msqrtR[specimen_num])},ignore_index=True)
             
             retval[index,specimen_num]=self.crack_surrogates[specimen_num][surrogate_key].evaluate_derivative(datagrid,"mu",accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
@@ -447,10 +453,10 @@ class estparam(object):
             #datagrid=np.array(((mu[specimen_num],self.crackheat_table["BendingStress (Pa)"].values[index],self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],log_msqrtR[specimen_num]),),dtype='d')
             
             datagrid = pd.DataFrame(columns=["mu","log_msqrtR"])
-            datagrid = datagrid.append({"mu": mu[specimen_num],
+            datagrid = datagrid.append({"mu": float(mu[specimen_num]),
                                         #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "log_msqrtR": log_msqrtR[specimen_num]},ignore_index=True)
+                                        "log_msqrtR": float(log_msqrtR[specimen_num])},ignore_index=True)
             
             retval[index,specimen_num]=self.crack_surrogates[specimen_num][surrogate_key].evaluate_derivative(datagrid,"log_msqrtR",accel_trisolve_devs=self.accel_trisolve_devs)[0]
             pass
@@ -567,10 +573,10 @@ class estparam(object):
             
             # Create pymc3 predicted_crackheating expression
             #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
-            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR))
 
             #sigma_additive_prior_mu = 0.0
-            self.sigma_additive_prior_sigma = 2.0e-5*self.crackheat_scalefactor
+            #self.predicted_crackheating_lower_bound=1e-12 # Joules/cycle or W/Hz... this is added to the predicted crack heating and should be in the noise. Used to avoid the problem of predicted heatings that are identically zero, making log(prediction) -infinity. 
+            self.sigma_additive_prior_sigma = 2.0e-8*self.crackheat_scalefactor 
             self.sigma_multiplicative_prior_mu = 0.0 #np.log(0.5)
             self.sigma_multiplicative_prior_sigma = 0.25
             
@@ -580,18 +586,27 @@ class estparam(object):
             
             self.sigma_multiplicative = Print('sigma_multiplicative')(pm.Lognormal("sigma_multiplicative",mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma))
             self.sigma_multiplicative_prior = pm.Lognormal.dist(mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma)
+
+            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)) #self.predicted_crackheating_lower_bound + 
+
         
+            if cores > 1:
+                inhibit_accel_pid=os.getpid() # work around problems with OpenMP threads and Python multiprocessing by inhibiting threads except in the subprocesses
+                pass
+            else:
+                inhibit_accel_pid=None
+                pass
             
             (self.MixedNoiseOp,self.y_like) = CreateMixedNoise('y_like',
                                                                self.sigma_additive,
                                                                self.sigma_multiplicative,
                                                                prediction=self.predicted_crackheating*self.crackheat_scalefactor,
                                                                observed=self.crackheat_scalefactor*self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
-                                                               inhibit_accel_pid=os.getpid()) # ,shape=specimen_nums.shape[0])
+                                                               inhibit_accel_pid=inhibit_accel_pid) # ,shape=specimen_nums.shape[0])
             
             #self.step = pm.Metropolis()
             self.step=pm.NUTS()
-            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune) # discard_tuned_samples=False,tune=0)
+            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune,discard_tuned_samples=True,random_seed=list(range(cores))) #tune=tune cores=cores chains=num_chains  ***!!! rememeber to unset random seed eventually!!!
             pass
         pass
 
@@ -682,8 +697,16 @@ class estparam(object):
         # self.MixedNoiseOp(theano.shared(self.trace.get_values("sigma_additive")[0]),theano.shared(self.trace.get_values("sigma_multiplicative")[0]),theano.shared(self.trace.get_values("predicted_crackheating")[0,:])).eval() ... gives log(p) = 10
         # self.MixedNoiseOp.evaluate_p_from_cache(self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,0],self.MixedNoiseOp.observed[0])
         
-        pdf_integral = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,0],obs),.0001,np.inf)[0]
+        pdf_integral1 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*self.crackheat_scalefactor,obs),150.0,np.inf)[0]
 
+        pdf_integral2 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*self.crackheat_scalefactor,obs),.0000001,150.0)[0]
+
+        import theano.tests.unittest_tools
+        theano.config.compute_test_value = "off"
+
+        theano.tests.unittest_tools.verify_grad(self.MixedNoiseOp,[ self.trace.get_values("sigma_additive")[0], self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,:]*self.crackheat_scalefactor ],abs_tol=1e-12,rel_tol=1e-5,eps=1e-7)
+
+        raise ValueError("Foo!")
 
         return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
 

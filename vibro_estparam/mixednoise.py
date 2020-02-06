@@ -10,10 +10,11 @@ import scipy.integrate
 import scipy.special
 import theano
 import theano.tensor as tt
+from theano.printing import Print
 from theano import gof
 
 
-use_accel = True
+use_accel =  True
 if use_accel:
     from . import mixednoise_accel
     pass
@@ -74,6 +75,12 @@ class mixednoise_op(gof.Op):
         # = (1.0/(sigma_multiplicative*sigma_additive*2*pi)) *np.exp(-((observed)**2.0)/(2.0*sigma_additive**2.0)) * (1/2)*sqrt(pi)*sqrt(2)*sigma_multiplicative*erf((log(y)-log(prediction))/(sqrt(2)*sigma_multiplicative)) evaluated from y=0...eps
         # = (1.0/(sigma_multiplicative*sigma_additive*2*pi)) *np.exp(-((observed)**2.0)/(2.0*sigma_additive**2.0)) * (1/2)*sqrt(pi)*sqrt(2)*sigma_multiplicative*( erf((log(eps)-log(prediction))/(sqrt(2)*sigma_multiplicative))- erf((log(0)-log(prediction))/(sqrt(2)*sigma_multiplicative))) ... where log(0) is -inf  and erf(-inf)= -1
         # = (1.0/(sigma_multiplicative*sigma_additive*2*pi)) *np.exp(-((observed)**2.0)/(2.0*sigma_additive**2.0)) * (1/2)*sqrt(pi)*sqrt(2)*sigma_multiplicative*( erf((log(eps)-log(prediction))/(sqrt(2)*sigma_multiplicative)) + 1)
+        if sigma_additive < 1e-20 or sigma_multiplicative < 1e-20:
+            # ridiculously small.... treat derivative as zero
+            return 0.0
+
+        #if prediction_indexed==0.0:
+        #    return 0.0 ... not correct!
 
         return (1.0/(sigma_multiplicative*sigma_additive*2.0*np.pi)) *np.exp(-((observed_indexed)**2.0)/(2.0*sigma_additive**2.0)) * (1.0/2.0)*np.sqrt(np.pi)*np.sqrt(2.0)*sigma_multiplicative*( scipy.special.erf((np.log(eps)-np.log(prediction_indexed))/(np.sqrt(2.0)*sigma_multiplicative)) + 1.0)
         
@@ -85,6 +92,9 @@ class mixednoise_op(gof.Op):
         # n1 ~ lognormal(0,sigma_multiplicative^2)
         # a0n1 ~ lognormal(ln(a0),sigma_multiplicative^2)
         # n2 ~ normal(0,sigma_additive^2)
+        if sigma_additive < 1e-20 or sigma_multiplicative < 1e-20:
+            # ridiculously small.... treat derivative as zero
+            return 0.0
         res = cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)*( (((observed_indexed-y)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive))
         #print("kernel_dsa_unaccel(%g,%g,%g,%g,%g) returns %g\n" % (y,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,res))
         return res
@@ -100,6 +110,9 @@ class mixednoise_op(gof.Op):
         # = (1.0/(sigma_multiplicative*sigma_additive*2*pi)) *np.exp(-((observed)**2.0)/(2.0*sigma_additive**2.0)) * ( (((observed_indexed)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive) ) * (1/2)*sqrt(pi)*sqrt(2)*sigma_multiplicative*( erf((log(eps)-log(prediction))/(sqrt(2)*sigma_multiplicative))- erf((log(0)-log(prediction))/(sqrt(2)*sigma_multiplicative))) ... where log(0) is -inf  and erf(-inf)= -1
         # = (1.0/(sigma_multiplicative*sigma_additive*2*pi)) *np.exp(-((observed)**2.0)/(2.0*sigma_additive**2.0)) * ( (((observed_indexed)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive) ) * (1/2)*sqrt(pi)*sqrt(2)*sigma_multiplicative*( erf((log(eps)-log(prediction))/(sqrt(2)*sigma_multiplicative)) + 1)
         # ... reduces to ( (((observed_indexed)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive) ) * lognormal_normal_convolution_integral_y_zero_to_eps()
+        if sigma_additive < 1e-20 or sigma_multiplicative < 1e-20:
+            # ridiculously small.... treat derivative as zero
+            return 0.0
 
         return ( (((observed_indexed)**2.0)/(sigma_additive**3.0)) - (1.0/sigma_additive) ) * cls.lognormal_normal_convolution_integral_y_zero_to_eps(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps)
     
@@ -111,11 +124,31 @@ class mixednoise_op(gof.Op):
         # n1 ~ lognormal(0,sigma_multiplicative^2)
         # a0n1 ~ lognormal(ln(a0),sigma_multiplicative^2)
         # n2 ~ normal(0,sigma_additive^2)
-        return cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)*( (((np.log(y) - np.log(prediction_indexed))**2.0)/(sigma_multiplicative**3.0)) - (1.0/sigma_multiplicative))
+        if sigma_additive < 1e-20 or sigma_multiplicative < 1e-20:
+            # ridiculously small.... treat derivative as zero
+            return 0.0
+        if prediction_indexed == 0.0:
+            return 0.0
+            
+        res = cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)*( (((np.log(y) - np.log(prediction_indexed))**2.0)/(sigma_multiplicative**3.0)) - (1.0/sigma_multiplicative))
 
+        if not np.isfinite(res):
+            # res becomes nan if prediction==0, but this is OK because the derivative is forced to zero by the exponential in the normal convolution kernel in that case
+            assert(prediction_indexed==0.0)
+            res=0.0
+            pass
+
+        return res
     
     @classmethod
     def lognormal_normal_convolution_integral_y_zero_to_eps_deriv_sigma_multiplicative(cls,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps):
+
+        if sigma_additive < 1e-20 or sigma_multiplicative < 1e-20:
+            # ridiculously small.... treat derivative as zero
+            return 0.0
+        if prediction_indexed == 0.0:
+            return 0.0
+
         # ... Treating y=0 in additive noise exponent (because y presumed small relative to observed):
 
         # The effect of the derivative is to multiply the original kernel by ( (((log(y) - log(prediction_indexed))**2.0)/(sigma_multiplicative**3.0)) - (1.0/sigma_multiplicative))
@@ -144,10 +177,11 @@ class mixednoise_op(gof.Op):
         integration_term = additive_factor * (1.0/(sigma_multiplicative**2.0*np.sqrt(2.0*np.pi)))* ( (1.0/2.0)*np.sqrt(2.0*np.pi)*sigma_multiplicative*scipy.special.erf((np.log(eps)-np.log(prediction_indexed))/(sigma_multiplicative*np.sqrt(2.0)))  -  (np.log(eps)-np.log(prediction_indexed))*np.exp(-(np.log(prediction_indexed)**2.0 + np.log(eps)**2.0)/(2.0*sigma_multiplicative**2.0) + (np.log(eps)/sigma_multiplicative**2.0)*np.log(prediction_indexed) ) + (1.0/2.0)*np.sqrt(2.0*np.pi)*sigma_multiplicative  )
 
         
-        #if np.isnan(integration_term) or np.isnan(one_over_sigmamultiplicative_term):
-        #    import pdb
-        #    pdb.set_trace()
-        #    pass
+        if (not np.isfinite(integration_term)) or (not np.isfinite(one_over_sigmamultiplicative_term)):
+            #import pdb
+            #pdb.set_trace()
+            assert(prediction_indexed==0.0) # Know this happens in this case and it is OK because derivative is indeed zero
+            return 0.0
         
         return integration_term + one_over_sigmamultiplicative_term        
     
@@ -155,6 +189,12 @@ class mixednoise_op(gof.Op):
     def lognormal_normal_convolution_integral_y_zero_to_eps_deriv_prediction(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,eps):
         # ... Treating y=0 in additive noise exponent (because y presumed small relative to observed):
 
+        if prediction_indexed==0.0:
+            return 0.0
+
+        if sigma_additive < 1e-20 or sigma_multiplicative < 1e-20:
+            # ridiculously small.... treat derivative as zero
+            return 0.0
         # The effect of the derivative is to multiply the original kernel by (((np.log(y) - np.log(prediction_indexed))**2.0)/((sigma_multiplicative**2.0)*prediction_indexed))
         # As usual the additive factor in the integral can be pulled out as a constant by neglecting y relative to observed:
         additive_factor = (1.0/(sigma_additive*np.sqrt(2.0*np.pi)))*np.exp(-observed_indexed**2.0/(2.0*sigma_additive**2.0))
@@ -163,6 +203,11 @@ class mixednoise_op(gof.Op):
         # by Wolfram Alpha this integrates to -(1/2)*s*exp(-((log(c)-log(y))^2)/s)
         # As worked out on paper, we get
         integration = -1.0/(sigma_multiplicative*prediction_indexed*np.sqrt(2.0*np.pi))*np.exp(-((np.log(prediction_indexed)-np.log(eps))**2.0)/(2.0*sigma_multiplicative**2.0))
+        if not np.isfinite(integration):
+            # integration becomes nan if prediction==0, but this is OK because the derivative is forced to zero by the exponential in the normal convolution kernel in that case
+            assert(prediction_indexed==0.0)
+            integration=0.0
+            pass
 
         return additive_factor*integration
     
@@ -173,7 +218,13 @@ class mixednoise_op(gof.Op):
         # n1 ~ lognormal(0,sigma_multiplicative^2)
         # a0n1 ~ lognormal(ln(a0),sigma_multiplicative^2)
         # n2 ~ normal(0,sigma_additive^2)
-        return cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)* ((np.log(y) - np.log(prediction_indexed))/((sigma_multiplicative**2.0)*prediction_indexed))
+        res = cls.lognormal_normal_convolution_kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y)* ((np.log(y) - np.log(prediction_indexed))/((sigma_multiplicative**2.0)*prediction_indexed))
+        if not np.isfinite(res):
+            # res becomes nan if prediction==0, but this is OK because the derivative is forced to zero by the exponential in the normal convolution kernel in that case
+            assert(prediction_indexed==0.0)
+            res=0.0
+            pass
+        return res
 
     #@classmethod
     #def integrate_lognormal_normal_kernel(cls,sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed):
@@ -211,28 +262,54 @@ class mixednoise_op(gof.Op):
         
         # Break integration into singular portion, portion up to observed value, portion to infinity to help make sure quadrature is accurate.
         #print("Integration from y=%g... %g" % (bounds[0],bounds[1]))
-        (p1,p1err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[0],bounds[1],epsabs=3e-15)
-        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[0],bounds[1],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+        if bounds[0] < bounds[1]:
+            (p1,p1err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[0],bounds[1],epsabs=3e-15)
+            #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[0],bounds[1],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+            pass
+        else:
+            p1=0.0
+            p1err=0.0
+            pass
 
         #print("Integration from y=%g... %g" % (bounds[1],bounds[2]))
-        (p2,p2err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[1],bounds[2],epsabs=3e-15)
-        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[1],bounds[2],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
-
+        if bounds[1] < bounds[2]:
+            (p2,p2err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[1],bounds[2],epsabs=3e-15)
+            #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[1],bounds[2],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+            pass
+        else:
+            p2=0.0
+            p2err=0.0
+            pass
 
         #print("Integration from y=%g... %g" % (bounds[2],bounds[3]))
-        (p3,p3err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[2],bounds[3],epsabs=3e-15)
-        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[2],bounds[3],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+        if bounds[2] < bounds[3]:
+            (p3,p3err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[2],bounds[3],epsabs=3e-15)
+            pass
+            #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[2],bounds[3],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+        else:
+            p3=0.0
+            p3err=0.0
+            pass
 
         #print("Integration from y=%g... %g" % (bounds[3],bounds[4]))
-        (p4,p4err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[3],bounds[4],epsabs=3e-15)
-        #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[3],bounds[4],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
-
+        if bounds[3] < bounds[4]:
+            (p4,p4err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[3],bounds[4],epsabs=3e-15)
+            #print("integral from %g to %g, sa=%g, sm=%g, pi=%g, oi=%g,ea=%g" %(bounds[3],bounds[4],sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,3e-15))
+            pass
+        else:
+            p4=0.0
+            p4err=0.0
+            pass
 
         
         #print("Integration from y=%g... inf" % (bounds[4]))
 
         (p5,p5err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[4],np.inf,epsabs=1e-24)
-        #print("integrate_kernel returns %s from %s, %s, %s, %s, %s, and %s; p1err=%g, p2err=%g,p3err=%g,p4err=%g,p5err=%g" % (str(singular_portion+p1+p2+p3+p4+p5),str(singular_portion),str(p1),str(p2),str(p3),str(p4),str(p5),p1err,p2err,p3err,p4err,p5err))
+        if not np.isfinite(singular_portion+p1+p2+p3+p4+p5):
+            print("integrate_kernel returns %s from %s, %s, %s, %s, %s, and %s; p1err=%g, p2err=%g,p3err=%g,p4err=%g,p5err=%g" % (str(singular_portion+p1+p2+p3+p4+p5),str(singular_portion),str(p1),str(p2),str(p3),str(p4),str(p5),p1err,p2err,p3err,p4err,p5err))
+            import pdb
+            pdb.set_trace()
+            pass
         #print("kernel(1,1,1,1,1)=%g" % (kernel(1,1,1,1,1)))
         
         return singular_portion + p1 + p2 + p3 + p4 + p5
@@ -297,6 +374,10 @@ class mixednoise_op(gof.Op):
 
             
             dlogp =  dp/p
+            assert((np.isfinite(dp)).all())
+            assert((np.isfinite(p)).all())
+            dlogp[~np.isfinite(dlogp)]=0.0
+
             #print("accel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
             
             pass
@@ -311,6 +392,13 @@ class mixednoise_op(gof.Op):
                                            self.lognormal_normal_convolution_kernel_deriv_sigma_additive,
                                            sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
                 dlogp[index] = (1.0/p) * dp
+                assert(np.isfinite(dp))
+                assert(np.isfinite(p))
+            
+                if not np.isfinite(dlogp[index]): # Would come from overflow (div/0) which I think should just be treated as zero
+                    dlogp[index]=0.0
+                    pass
+                    
                 pass
             #print("unaccel: p=%s; dp=%s; dlogp = %s" % (str(p),str(dp),str(dlogp)))
 
@@ -318,6 +406,11 @@ class mixednoise_op(gof.Op):
         
         #print("grad_sigma_additive() returns %s from p = %s and dp = %s" % (str(dlogp),str(p),str(dp)))
         
+        if (~np.isfinite(dlogp)).any():
+            import pdb
+            pdb.set_trace()
+            pass
+
         return dlogp
 
 
@@ -332,6 +425,9 @@ class mixednoise_op(gof.Op):
                                                                        sigma_additive,sigma_multiplicative,prediction,self.observed)
 
             dlogp =  dp/p
+            assert((np.isfinite(dp)).all())
+            assert((np.isfinite(p)).all())
+            dlogp[~np.isfinite(dlogp)]=0.0
             pass
         else:
             for index in range(self.observed.shape[0]):
@@ -344,13 +440,21 @@ class mixednoise_op(gof.Op):
                                            self.lognormal_normal_convolution_kernel_deriv_sigma_multiplicative,
                                            sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
                 dlogp[index] = (1.0/p) * dp
+                assert(np.isfinite(dp))
+                assert(np.isfinite(p))
+            
+                if ~np.isfinite(dlogp[index]): # Would come from overflow (div/0) which I think should just be treated as zero
+                    dlogp[index]=0.0
+                    pass
+                    
                 pass
             pass
 
         #print("grad_sigma_multiplicative: use_accel=%s p=%s dp=%s dlogp=%s" % (str(use_accel),str(p),str(dp),str(dlogp)))
-        #if np.isnan(dlogp).any():
-        #    import pdb
-        #    pdb.set_trace()
+        if (~np.isfinite(dlogp)).any():
+            import pdb
+            pdb.set_trace()
+            pass
         
         return dlogp
 
@@ -366,6 +470,9 @@ class mixednoise_op(gof.Op):
                                                              sigma_additive,sigma_multiplicative,prediction,self.observed)
             
             dlogp =  dp/p
+            assert((np.isfinite(dp)).all())
+            assert((np.isfinite(p)).all())
+            dlogp[~np.isfinite(dlogp)]=0.0
             pass
         else:
             for index in range(self.observed.shape[0]):
@@ -378,11 +485,24 @@ class mixednoise_op(gof.Op):
                                            self.lognormal_normal_convolution_kernel_deriv_prediction,
                                            sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
                 dlogp[index] = (1.0/p) * dp
+                assert(np.isfinite(dp))
+                assert(np.isfinite(p))
+            
+                if not np.isfinite(dlogp[index]): # Would come from overflow (div/0) which I think should just be treated as zero
+                    dlogp[index]=0.0
+                    pass
+                    
+
                 pass
             
             #print("grad_prediction() returns %s from p = %s and dp = %s" % (str(dlogp),str(p),str(dp)))
             pass
     
+        if (~np.isfinite(dlogp)).any():
+            import pdb
+            pdb.set_trace()
+            pass
+        
         return dlogp
         
     
@@ -440,7 +560,7 @@ def CreateMixedNoise(name,
                        sigma_multiplicative,
                        prediction):
         # captures "MixedNoiseOp"
-        return MixedNoiseOp(sigma_additive,sigma_multiplicative,prediction)
+        return Print('MixedNoiseLogP')(MixedNoiseOp(sigma_additive,sigma_multiplicative,prediction))
     
     
     return (MixedNoiseOp,pm.DensityDist(name,

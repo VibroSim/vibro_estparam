@@ -77,6 +77,7 @@ mna_pyx_ext=em_dict["vibro_estparam.mixednoise_accel"]
 mna_pyx_ext.include_dirs=["."]
 #mna_pyx_ext.extra_compile_args=['-O0','-g','-Wno-uninitialized']
 mna_pyx_ext.extra_compile_args=['-fopenmp','-O5','-Wno-uninitialized']
+mna_pyx_ext.undef_maros=["NDEBUG"] # override the NDEBUG specification so that asserts correctly cause failure!
 mna_pyx_ext.libraries=['gomp']
 
 
