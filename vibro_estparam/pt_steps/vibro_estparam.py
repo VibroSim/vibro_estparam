@@ -35,9 +35,9 @@ def run(_xmldoc,_element,
 
     #context = cl.create_some_context()
     #accel_trisolve_devs=(os.getpid(),tuple([ (dev.platform.name,dev.name) for dev in context.devices]))
-    accel_trisolve_devs=(os.getpid(), (('NVIDIA CUDA', 'Quadro GP100'),)) 
+    #accel_trisolve_devs=(os.getpid(), (('NVIDIA CUDA', 'Quadro GP100'),)) 
     #accel_trisolve_devs = (os.getpid(),(('Intel(R) OpenCL HD Graphics', 'Intel(R) Gen9 HD Graphics NEO'),))
-    #accel_trisolve_devs = None
+    accel_trisolve_devs = None
 
 
     crack_specimens = []
@@ -97,7 +97,8 @@ def run(_xmldoc,_element,
      sigma_multiplicative_prior_mu,
      sigma_multiplicative_prior_sigma,
      crackheat_scalefactor,
-     excfreq_median) = posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
+     excfreq_median,
+     predicted_crackheating_lower_bound) = posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
     #posterior_estimation(10,4,cores=4,tune=20)
     
     
@@ -118,6 +119,7 @@ def run(_xmldoc,_element,
         (("dc:sigma_multiplicative_prior_sigma",{"material": material_str}), numericunitsv(sigma_multiplicative_prior_sigma,"Unitless")),
         (("dc:crackheat_scalefactor",{"material": material_str}), numericunitsv(crackheat_scalefactor,"Unitless")),
         (("dc:excfreq_median",{"material": material_str}), numericunitsv(excfreq_median,"Hz")),
+        (("dc:predicted_crackheating_lower_bound",{"material": material_str}), numericunitsv(predicted_crackheating_lower_bound,"W/Hz")),
     ]
     
     return ret
