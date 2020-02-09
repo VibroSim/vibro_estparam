@@ -88,89 +88,36 @@ def run(_xmldoc,_element,
         plot_and_estimate=estimator.plot_and_estimate
         pass
     
-    posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
+    (trace_df,
+     mu_prior_mu,
+     mu_prior_sigma,
+     msqrtR_prior_mu,
+     msqrtR_prior_sigma,
+     sigma_additive_prior_sigma_unscaled,
+     sigma_multiplicative_prior_mu,
+     sigma_multiplicative_prior_sigma,
+     crackheat_scalefactor,
+     excfreq_median) = posterior_estimation(steps_per_chain_int,num_chains_int,cores=cores_int,tune=tune_int)
     #posterior_estimation(10,4,cores=4,tune=20)
-    (mu_estimate,msqrtR_estimate,Theta0_median,Theta1_median,packed_L_median,trace_frame,traceplots_fig,theta_L_sigmaerror_fig,lambdaplots,histograms,lambda_scatterplot_fig,mu_msqrtR_scatterplot_fig,mu_hist_fig,msqrtR_hist_fig,joint_hist_fig,prediction_plot_fig) = plot_and_estimate(mu_zone=(0.05,1.0),msqrtR_zone=(29.5e6,48.6e6),marginal_bins=50,joint_bins=(230,200)) 
-
-    trace_frame_href = hrefv("%s_trace_frame.csv" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    trace_frame.to_csv(trace_frame_href.getpath())
-
-    pl.figure(traceplots_fig.number)
-    traceplots_href = hrefv("%s_traceplots.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(traceplots_href.getpath(),dpi=900)
-
-    pl.figure(theta_L_sigmaerror_fig.number)
-    theta_L_sigmaerror_href = hrefv("%s_theta_L_sigmaerror.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(theta_L_sigmaerror_href.getpath(),dpi=300)
-
-    lambdaplot_hrefs=[]
-    for lambdaidx in range(len(lambdaplots)):
-        pl.figure(lambdaplots[lambdaidx].number)
-        lambdaplot_href = hrefv("%s_lambda_%.2d.png" % (material_str.replace(" ","_"),lambdaidx),_xmldoc.getcontexthref().leafless())
-        pl.savefig(lambdaplot_href.getpath(),dpi=300)
-        lambdaplot_hrefs.append(lambdaplot_href)
-        pass
-
-
-    histogram_hrefs=[]
-    histidx=0
-    for histkey in histograms:
-        pl.figure(histograms[histkey].number)
-        histogram_href = hrefv("%s_histogram_%.2d.png" % (material_str.replace(" ","_"),histidx),_xmldoc.getcontexthref().leafless())
-        pl.savefig(histogram_href.getpath(),dpi=300)
-        histogram_hrefs.append(histogram_href)
-        histidx+=1
-        pass
-
-    pl.figure(lambda_scatterplot_fig.number)
-    lambda_scatterplot_href = hrefv("%s_lambda_scatterplot.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(lambda_scatterplot_href.getpath(),dpi=300)
-
-    pl.figure(mu_msqrtR_scatterplot_fig.number)
-    mu_msqrtR_scatterplot_href = hrefv("%s_mu_msqrtR_scatterplot.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(mu_msqrtR_scatterplot_href.getpath(),dpi=300)
     
-
-
-    pl.figure(mu_hist_fig.number)
-    mu_hist_href = hrefv("%s_mu_histogram.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(mu_hist_href.getpath(),dpi=300)
-
-    pl.figure(msqrtR_hist_fig.number)
-    msqrtR_hist_href = hrefv("%s_msqrtR_histogram.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(msqrtR_hist_href.getpath(),dpi=300)
-
-    pl.figure(joint_hist_fig.number)
-    joint_hist_href = hrefv("%s_joint_histogram.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(joint_hist_href.getpath(),dpi=300)
-
-    pl.figure(prediction_plot_fig.number)
-    prediction_plot_href = hrefv("%s_prediction_plot.png" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
-    pl.savefig(prediction_plot_href.getpath(),dpi=300)
-
-    # !!!*** come up with better directory for ouput
-    #pm.save_trace(estimator.trace,directory="pymc3_trace",overwrite=True)    
-
+    
+    trace_frame_href = hrefv("%s_trace_frame.csv" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
+    trace_df.to_csv(trace_frame_href.getpath())
+    
+    
+    
     ret = [
         (("dc:trace_frame", {"material": material_str}), trace_frame_href),
-        (("dc:traceplots",{ "material": material_str}), traceplots_href),
-        (("dc:theta_L_sigmaerror",{ "material": material_str}), theta_L_sigmaerror_href),
-        (("dc:mu_estimate",{ "material": material_str}), numericunitsv(mu_estimate,"Unitless")),
-        (("dc:msqrtR_estimate",{"material": material_str}), numericunitsv(msqrtR_estimate,"m^-1.5")),
-        (("dc:theta0_estimate",{ "material": material_str}), numericunitsv(Theta0_median,"Unitless")),
-        (("dc:theta1_estimate",{"material": material_str}), numericunitsv(Theta1_median,"log_meters_minusthreehalves")),
-        (("dc:packedL_estimate",{"material": material_str}), arrayv(packed_L_median)), # packed_L contains the (1,1), (2,1), and (2,2) elements of the lower triangular L matrix, in that order. LL' is the covariance matrix for (theta0,theta1)
-
-        (("dc:mu_histogram",{"material": material_str}), mu_hist_href),
-        (("dc:msqrtR_histogram",{"material": material_str}), msqrtR_hist_href),
-        (("dc:joint_histogram",{"material": material_str}), joint_hist_href),
-        (("dc:prediction_plot",{"material": material_str}), prediction_plot_href),
-        (("dc:lambda_scatterplot",{"material": material_str}), lambda_scatterplot_href),
-        (("dc:mu_msqrtR_scatterplot",{"material": material_str}), mu_msqrtR_scatterplot_href),
+        (("dc:mu_prior_mu", {"material": material_str}), numericunitsv(mu_prior_mu,"Unitless")),
+        (("dc:mu_prior_sigma", {"material": material_str}), numericunitsv(mu_prior_sigma,"Unitless")),
+        #(("dc:msqrtR_prior_mu",{"material": material_str}), numericunitsv(msqrtR_prior_mu,"m^-1.5")),
+        (("dc:msqrtR_prior_mu",{"material": material_str}), numericunitsv(msqrtR_prior_mu,"ln_meters*-1.5")),
+        (("dc:msqrtR_prior_sigma",{"material": material_str}), numericunitsv(msqrtR_prior_sigma,"ln_meters*-1.5")),
+        (("dc:sigma_additive_prior_sigma_unscaled",{"material": material_str}), numericunitsv(sigma_additive_prior_sigma_unscaled,"W/Hz")),
+        (("dc:sigma_multiplicative_prior_mu",{"material": material_str}), numericunitsv(sigma_multiplicative_prior_mu,"Unitless")),
+        (("dc:sigma_multiplicative_prior_sigma",{"material": material_str}), numericunitsv(sigma_multiplicative_prior_sigma,"Unitless")),
+        (("dc:crackheat_scalefactor",{"material": material_str}), numericunitsv(crackheat_scalefactor,"Unitless")),
+        (("dc:excfreq_median",{"material": material_str}), numericunitsv(excfreq_median,"Hz")),
     ]
-    ret.extend([ (("dc:lambdaplot",{"material": material_str, "lambdaidx" : str(lambdaidx)}), lambdaplot_hrefs[lambdaidx]) for lambdaidx in range(len(lambdaplot_hrefs))])
-
-    ret.extend([ (("dc:histogram",{"material": material_str, "histidx" : str(histidx)}), histogram_hrefs[histidx]) for histidx in range(len(histogram_hrefs))])
     
-
     return ret

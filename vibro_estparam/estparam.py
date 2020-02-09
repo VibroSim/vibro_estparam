@@ -5,6 +5,7 @@ import glob
 import collections
 import re
 import scipy
+import scipy.special
 import scipy.integrate
 import numpy as np
 import theano
@@ -29,7 +30,7 @@ from theano.compile.ops import as_op
 
 from crackheat_surrogate2.load_surrogate import load_denorm_surrogates_from_jsonfile
 from .mixednoise import CreateMixedNoise
-
+from .mixednoise_vibro_estparam import CreateMixedNoiseVibroEstparam
 
 class predict_crackheating_op(gof.Op):
     # Custom theano operation representing
@@ -227,7 +228,7 @@ class estparam(object):
     msqrtR_prior_mu = None
     msqrtR_prior_sigma = None
     msqrtR_prior = None
-    #predicted_crackheating_lower_bound = None # negligible value added to predicted crackheating values. 
+    predicted_crackheating_lower_bound = None # negligible value added to predicted crackheating values. 
     sigma_additive_prior_sigma = None
     sigma_additive_prior = None
     sigma_multiplicative_prior_mu = None
@@ -488,10 +489,11 @@ class estparam(object):
             self.msqrtR_prior = pm.Lognormal.dist(mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)
             
             #sigma_additive_prior_mu = 0.0
-            #self.predicted_crackheating_lower_bound=1e-12 # Joules/cycle or W/Hz... this is added to the predicted crack heating and should be in the noise. Used to avoid the problem of predicted heatings that are identically zero, making log(prediction) -infinity. 
-            self.sigma_additive_prior_sigma = 2.0e-8*self.crackheat_scalefactor 
+            self.predicted_crackheating_lower_bound=1e-12 # Joules/cycle or W/Hz... this is added to the predicted crack heating and should be in the noise. Used to avoid the problem of predicted heatings that are identically zero, making log(prediction) -infinity. 
+            self.sigma_additive_prior_sigma_unscaled = 2.0e-8
+            self.sigma_additive_prior_sigma = sigma_additive_prior_sigma_unscaled*self.crackheat_scalefactor 
             self.sigma_multiplicative_prior_mu = 0.0 #np.log(0.5)
-            self.sigma_multiplicative_prior_sigma = 0.25
+            self.sigma_multiplicative_prior_sigma = 0.75
             
             # priors for sigma_additive and sigma_multiplicative
             self.sigma_additive = Print('sigma_additive')(pm.HalfNormal("sigma_additive",sigma=self.sigma_additive_prior_sigma))
@@ -547,9 +549,8 @@ class estparam(object):
             #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
             #self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
             
-            use_fast_mixednoise=True
+            use_fast_mixednoise=False
             if not use_fast_mixednoise: 
-                # This is, or will probably soon become cruft... along with predict_crackheating_op & friends...
                 self.predict_crackheating_op_instance = predict_crackheating_op(self)
 
                 if check_gradient:
@@ -611,33 +612,85 @@ class estparam(object):
                                                                    inhibit_accel_pid=inhibit_accel_pid) # ,shape=specimen_nums.shape[0])
                 pass
             else:
-                # use_fast_mixednoise case
+                # use_fast_mixednoise case... turned out not to be fast after all... will probably
+                # not be used. 
                 self.sa_sm_mu_lm = tt.as_tensor_variable([self.sigma_additive,
                                                           self.sigma_multiplicative,
                                                           self.mu,
                                                           self.log_msqrtR])
-                (self.MixedNoiseOp,self.y_like) = mixednoise_vibro_estparam.CreateMixedNoiseVibroEstparam('crackheating', self.sa_sm_mu_lm,
-                                                                                                          self.crackheat_scalefactor*self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
-                                                                                                          lambda mu, log_msqrtR: self.crackheat_scalefactor*self.predict_crackheating(mu,log_msqrtR),
-                                                                                                          inhibit_accel_pid = inhibit_accel_pid)
+                (self.MixedNoiseOp,self.y_like) = CreateMixedNoiseVibroEstparam('crackheating', self.sa_sm_mu_lm,
+                                                                                self.crackheat_scalefactor*self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
+                                                                                lambda mu, log_msqrtR: self.crackheat_scalefactor*(self.predict_crackheating(mu,log_msqrtR)+self.predicted_crackheating_lower_bound),
+                                                                                inhibit_accel_pid = inhibit_accel_pid)
                 pass
-
+            
                 
             #self.step = pm.Metropolis()
             self.step=pm.NUTS()
             self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune,discard_tuned_samples=True,random_seed=list(range(cores))) #tune=tune cores=cores chains=num_chains  ***!!! rememeber to unset random seed eventually!!!
-            pass
+            trace_df = pm.backends.tracetab.trace_to_dataframe(self.trace,include_transformed=True)
+
+
+        
+            return (trace_df,
+                    # Scalars
+                    self.mu_prior_mu,
+                    self.mu_prior_sigma,
+                    self.msqrtR_prior_mu,
+                    self.msqrtR_prior_sigma,
+                    self.sigma_additive_prior_sigma_unscaled,
+                    self.sigma_multiplicative_prior_mu,
+                    self.sigma_multiplicative_prior_sigma,
+                    self.crackheat_scalefactor,
+                    excfreq_median)
         pass
 
 
 
     
-    def plot_and_estimate(self,mu_zone=(0.05,1.5),msqrtR_zone=(1e6,.100e6),marginal_bins=50,joint_bins=(230,200)):
+    def plot_and_estimate(self,
+                          marginal_bins=50,joint_bins=(230,200)):
         """ Create diagnostic histograms. Also return coordinates of 
         joint histogram peak as estimates of mu and msqrtR"""
 
+        #trace_df["crackheat_scalefactor"]=self.crackheat_scalefactor
+        #trace_df["Median ExcFreq (Hz)"] = np.median(self.crackheat_table["ExcFreq (Hz)"].values)
+
         from matplotlib import pyplot as pl
         import cycler
+
+        # Scalars
+        mu_prior_mu=self.mu_prior_mu
+        mu_prior_sigma=self.mu_prior_sigma
+        msqrtR_prior_mu=self.msqrtR_prior_mu
+        msqrtR_prior_sigma=self.msqrtR_prior_sigma
+        #sigma_additive_prior_mu=self.sigma_additive_prior_mu
+        sigma_additive_prior_sigma=self.sigma_additive_prior_sigma
+        sigma_multiplicative_prior_mu=self.sigma_multiplicative_prior_mu
+        sigma_multiplicative_prior_sigma=self.sigma_multiplicative_prior_sigma
+
+        crackheat_scalefactor=self.crackheat_scalefactor
+        excfreq_median = np.median(self.crackheat_table["ExcFreq (Hz)"].values)
+
+        mu_vals=trace_df["mu"].values # self.trace.get_values("mu")
+        msqrtR_vals = trace_df["msqrtR"].values # self.trace.get_values("msqrtR")
+        sigma_additive_vals=trace_df["sigma_additive"].values/crackheat_scalefactor # self.trace.get_values("sigma_additive")/self.crackheat_scalefactor
+        sigma_multiplicative_vals=trace_df["sigma_multiplicative"].values #self.trace.get_values("sigma_multiplicative")
+        
+        
+        # Results
+        mu_estimate = np.median(mu_vals)
+        mu_sd=np.std(mu_vals)
+        msqrtR_estimate = np.median(msqrtR_vals)
+        msqrtR_sd=np.std(msqrtR_vals)
+        #self.log_msqrtR_estimate = np.median(np.log(msqrtR_vals))
+        #self.log_msqrtR_sd=np.std(np.log(msqrtR_vals))
+        sigma_additive_estimate = np.median(sigma_additive_vals)
+        sigma_additive_sd=np.std(sigma_additive_vals)
+        sigma_multiplicative_estimate = np.median(sigma_multiplicative_vals)
+        sigma_multiplicative_sd=np.std(sigma_multiplicative_vals)
+
+
 
         #traceplots=pl.figure()
 
@@ -648,43 +701,128 @@ class estparam(object):
         #traceplot_axes = pm.traceplot(self.trace)
         #traceplots = traceplot_axes[0,0].figure
         
-        traceplots = None
-
-        mu_vals=self.trace.get_values("mu")
-        msqrtR_vals = self.trace.get_values("msqrtR")
+        traceplots = pl.figure()
+        pl.subplot(2,2,1)
+        pl.plot(mu_vals)
+        pl.title('mu')
+        pl.subplot(2,2,2)
+        pl.plot(msqrtR_vals)
+        pl.title('msqrtR')
+        pl.subplot(2,2,3)
+        pl.plot(sigma_additive_vals)
+        pl.title('sigma_additive')
+        pl.subplot(2,2,4)
+        pl.plot(sigma_multiplicative_vals)
+        pl.title('sigma_multiplicative')
         
+
+        
+        gaussian = lambda x,mu,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x-mu)**2.0)/(2.0*sigma**2.0))
+        lognormal = lambda x,mu,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x)-mu)**2.0)/(2.0*sigma**2.0))
+        halfnormal = lambda x,sigma: (np.sqrt(2)/(sigma*np.sqrt(np.pi)))*np.exp(-(x**2.0)/(2.0*sigma**2.0))        
+
         mu_hist = pl.figure()
         pl.clf()
-        pl.hist(mu_vals,bins=marginal_bins)
+        pl.hist(mu_vals,bins=marginal_bins,density=True)
+        mu_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(mu_range,lognormal(mu_range,mu_prior_mu,mu_prior_sigma),'-')
+        pl.plot(mu_range,gaussian(mu_range,mu_estimate,mu_sd),'-')
         pl.xlabel('mu')
+        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
         pl.grid()
         
         
         msqrtR_hist = pl.figure()
         pl.clf()
-        pl.hist(msqrtR_vals,bins=marginal_bins)
+        pl.hist(msqrtR_vals,bins=marginal_bins,density=True)
+        msqrtR_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(msqrtR_range,lognormal(msqrtR_range,msqrtR_prior_mu,msqrtR_prior_sigma),'-')
+        pl.plot(msqrtR_range,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd),'-')
         pl.xlabel('m*sqrtR')
+        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
         pl.grid()
+
+
+        #log_msqrtR_hist = pl.figure()
+        #pl.clf()
+        #pl.hist(np.log(msqrtR_vals),bins=marginal_bins,density=True)
+        #log_msqrtR_range=np.linspace(0,pl.axis()[1],100)
+        #pl.plot(log_msqrtR_range,np.exp(self.msqrtR_prior.logp(np.exp(log_msqrtR_range))).eval(),'-')
+        #pl.plot(log_msqrtR_range,gaussian(log_msqrtR_range,self.log_msqrtR_estimate,self.log_msqrtR_sd),'-')
+        #pl.xlabel('log(m*sqrtR)')
+        #pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        #pl.grid()
+
+        sigma_additive_hist = pl.figure()
+        pl.clf()
+        pl.hist(sigma_additive_vals,bins=marginal_bins,density=True)
+        sa_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(sa_range,halfnormal(sa_range,sigma_additive_prior_sigma/crackheat_scalefactor),'-')
+        pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
+        pl.xlabel('sigma_additive (J/cy)')
+        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.grid()
+
+        sigma_additive_power_hist = pl.figure()
+        pl.clf()
+        pl.hist(sigma_additive_vals*1e3*excfreq_median,bins=marginal_bins,density=True)
+        sap_range=np.linspace(0,pl.axis()[1],100) # note: sap_range is in mW
+        pl.plot(sap_range,halfnormal(sap_range/1e3/excfreq_median,sigma_additive_prior_sigma/crackheat_scalefactor)/1.e3/excfreq_median,'-')
+        pl.plot(sap_range,gaussian(sap_range/1e3/excfreq_median,sigma_additive_estimate,sigma_additive_sd)/1.e3/excfreq_median,'-')
+        pl.xlabel('sigma_additive (mW) assuming typ freq of %f kHz' % (excfreq_median/1e3))
+        pl.grid()
+
+
+        sigma_multiplicative_hist = pl.figure()
+        pl.clf()
+        pl.hist(sigma_multiplicative_vals,bins=marginal_bins,density=True)
+        sm_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(sm_range,lognormal(sm_range,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma),'-')
+        pl.plot(sm_range,gaussian(sm_range,sigma_multiplicative_estimate,sigma_multiplicative_sd),'-')
+        pl.xlabel('sigma_multiplicative')
+        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.grid()
+
+        
+        probit = lambda x: np.sqrt(2)*scipy.special.erfinv(2.0*x-1.0)
+
+        sigma_multiplicative_pdfs = pl.figure()
+        pl.clf()
+        smp_range=np.linspace(0.001,4.0,200)
+        smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
+        pl.plot(smp_range,smp_function(smp_range,sigma_multiplicative_estimate),'-',
+                smp_range,smp_function(smp_range,sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd),'--',
+                smp_range,smp_function(smp_range,sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd),'--')
+        pl.xlabel('sigma_multiplicative')
+        pl.title('Probability density for multiplicative error')
+        pl.legend(('Based on best estimate (median)','97.5% lower bound for 95% conf interval','97.5% upper bound for 95% conf interval'))
+        pl.grid()
+
         
     
         joint_hist = pl.figure()
         pl.clf()
-        (hist,hist_mu_edges,hist_msqrtR_edges,hist_image)=pl.hist2d(mu_vals,msqrtR_vals,range=(mu_zone,msqrtR_zone),bins=joint_bins)
+        (hist,hist_mu_edges,hist_msqrtR_edges,hist_image)=pl.hist2d(mu_vals,msqrtR_vals,
+                                                                    range=((mu_estimate-3.0*mu_sd,
+                                                                            mu_estimate+3.0*mu_sd),
+                                                                           (msqrtR_estimate-3.0*msqrtR_sd,
+                                                                            msqrtR_estimate+3.0*msqrtR_sd)),
+                                                                    bins=joint_bins)
         pl.grid()
         pl.colorbar()
         pl.xlabel('mu')
         pl.ylabel('m*sqrt(R) (sqrt(m)/m^2)')
         
-        histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
-        self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
-        self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
+        #histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
+        #self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
+        #self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
     
         # Compare
-        self.predicted = self.predict_crackheating(self.mu_estimate,self.msqrtR_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
+        predicted = self.predict_crackheating(mu_estimate,np.log(msqrtR_estimate))*self.crackheat_table["ExcFreq (Hz)"].values
         
         # add to crackheat_table
         
-        self.crackheat_table["predicted"]=self.predicted
+        self.crackheat_table["predicted"]=predicted
 
         ## with:
         #self.actual = self.crackheat_table["ThermalPower (W)"].values
@@ -697,39 +835,54 @@ class estparam(object):
         actual_by_specimen = [ specimen_group["ThermalPower (W)"].values for specimen_group in specimen_groups ]
         specimen_group_specimens = list(specimen_grouping.groups) 
 
-        markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x','D'])()
+        markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()
         
 
         prediction_plot = pl.figure()
         pl.clf()
-        #pl.plot(self.predicted,self.actual,'x',
-        #        (0,np.max(self.predicted)),(0,np.max(self.predicted)),'-')
+        #pl.plot(predicted,self.actual,'x',
+        #        (0,np.max(predicted)),(0,np.max(predicted)),'-')
         [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cycler)) for idx in range(len(specimen_group_specimens)) ] 
-        pl.plot((0,np.max(self.predicted)*1e3),(0,np.max(self.predicted)*1e3),'-')
-        pl.legend(specimen_group_specimens,loc='best')
+        pl.plot((0,np.max(predicted)*1.6*1e3),(0,np.max(predicted)*1.6*1e3),'-')
+        pl.legend(specimen_group_specimens,loc='lower right')
         pl.xlabel('Predicted heating from model (mW)')
         pl.ylabel('Actual heating from experiment (mW)')
-        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (self.mu_estimate,self.msqrtR_estimate))
+        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
+        pl.grid()
+
+        prediction_zoom_plot = pl.figure()
+        pl.clf()
+        #pl.plot(predicted,self.actual,'x',
+        #        (0,np.max(predicted)),(0,np.max(predicted)),'-')
+        [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cycler)) for idx in range(len(specimen_group_specimens)) ] 
+        pl.plot((0,np.max(predicted)*1.6*1e3),(0,np.max(predicted)*1.6*1e3),'-')
+        pl.legend(specimen_group_specimens,loc='lower right')
+        pl.axis((0,np.max(predicted)*0.25*1e3,0,np.max(predicted)*0.2*1e3))
+        pl.xlabel('Predicted heating from model (mW)')
+        pl.ylabel('Actual heating from experiment (mW)')
+        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
         pl.grid()
 
 
         # self.MixedNoiseOp(theano.shared(self.trace.get_values("sigma_additive")[0]),theano.shared(self.trace.get_values("sigma_multiplicative")[0]),theano.shared(self.trace.get_values("predicted_crackheating")[0,:])).eval() ... gives log(p) = 10
         # self.MixedNoiseOp.evaluate_p_from_cache(self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,0],self.MixedNoiseOp.observed[0])
         
-        pdf_integral1 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*self.crackheat_scalefactor,obs),150.0,np.inf)[0]
+        #pdf_integral1 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*crackheat_scalefactor,obs),150.0,np.inf)[0]
 
-        pdf_integral2 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*self.crackheat_scalefactor,obs),.0000001,150.0)[0]
+        #pdf_integral2 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*crackheat_scalefactor,obs),.0000001,150.0)[0]
+        
+        #import theano.tests.unittest_tools
+        #theano.config.compute_test_value = "off"
 
-        import theano.tests.unittest_tools
-        theano.config.compute_test_value = "off"
+        #theano.tests.unittest_tools.verify_grad(self.MixedNoiseOp,[ self.trace.get_values("sigma_additive")[0], self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,:]*self.crackheat_scalefactor ],abs_tol=1e-12,rel_tol=1e-5,eps=1e-7)
 
-        theano.tests.unittest_tools.verify_grad(self.MixedNoiseOp,[ self.trace.get_values("sigma_additive")[0], self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,:]*self.crackheat_scalefactor ],abs_tol=1e-12,rel_tol=1e-5,eps=1e-7)
+        #raise ValueError("Foo!")
 
-        raise ValueError("Foo!")
+        #return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
 
-        return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+        
 
-
+        
 
     def posterior_estimation_partial_pooling(self,steps_per_chain,num_chains,cores=None,tune=500):
         """Build and execute PyMC3 Model to obtain self.trace which 
@@ -860,8 +1013,8 @@ class estparam(object):
         
         with self.model:
         
-            #self.step = pm.Metropolis()
-            self.step=pm.NUTS(target_accept=0.80)
+            self.step = pm.Metropolis()
+            #self.step=pm.NUTS(target_accept=0.80)
             self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune) # discard_tuned_samples=False,tune=0)
             pass
         pass

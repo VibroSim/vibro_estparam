@@ -3,20 +3,45 @@
 # to do an application-specific calculation with differentiation based on finite differences
 # that numerically bypasses all of the intermediate partial derivatives
 
+
+import sys
+import os
+import os.path
+import glob
+import collections
+import re
+import numpy as np
+import scipy as sp
+import scipy.integrate
+import scipy.special
+import theano
+import theano.tensor as tt
+from theano.printing import Print
+from theano import gof
+
+import pymc3 as pm
+#import pandas as pd
+from theano.compile.ops import as_op
+
 from . import mixednoise
+from .mixednoise_accel import integrate_lognormal_normal_convolution
 
-
-def gradient(location, function, rel_precision=1e-2,abs_precision=1e-8,initialrelstep=1e-4,initialabsstep=1e-5,minrelstep=1e-9):
+def gradient(location, function, rel_precision=1e-3,abs_precision=1e-8,initialrelstep=1e-4,initialabsstep=1e-5,minrelstep=1e-9,debug=False):
     
-    n_axes = location.shape[0]:
+    n_axes = location.shape[0]
     grad = np.zeros(n_axes,dtype='d')
     non_convergences = 0
-    max_flipflops = 10
 
     center_val = function(location)
+
+    if not np.isfinite(center_val):
+        non_convergences+=n_axes
+        print("gradients: function value @ location=%s is not finite; treating gradient as zero" % (str(location)))
+        return (grad,non_convergences)
     
     for axis in range(n_axes):
 
+        max_flipflops = 10
         initial_step = abs(location[axis])*initialrelstep
 
         if initial_step < initialabsstep:
@@ -30,6 +55,10 @@ def gradient(location, function, rel_precision=1e-2,abs_precision=1e-8,initialre
         num_flipflops = 0
         last_deriv=0.0
         
+        if debug:
+            print("gradient: axis=%d; location=%g; initial_step=%g" % (axis,location[axis],initial_step))
+            pass
+
         while not done:
 
             location_1 = location.copy()
@@ -44,23 +73,19 @@ def gradient(location, function, rel_precision=1e-2,abs_precision=1e-8,initialre
                                              (val_2 - center_val)*2.0/step,
                                              (center_val - val_1)*2.0/step),dtype='d')
 
+            if debug:
+                print("apparent_derivatives=%g; %g %g " % (apparent_derivatives[0],apparent_derivatives[1],apparent_derivatives[2]))
+                pass
+                
             deriv_diffs = apparent_derivatives[:,np.newaxis]-apparent_derivatives[np.newaxis,:]
             deriv_mean = np.mean(apparent_derivatives)
             max_deriv_diff = np.amax(abs(deriv_diffs))
-            if max_deriv_diff > rel_precision*abs(deriv_mean) and max_deriv_diff > abs_precision:
+            if (max_deriv_diff > rel_precision*abs(deriv_mean) and max_deriv_diff > abs_precision) or not np.isfinite(apparent_derivatives).all() :
                 armed=False
+                gooditer=False
                 pass
             else:
                 gooditer=True
-                pass
-
-            if armed and gooditer:
-                deriv_diff = abs(apparent_derivatives[0] - last_deriv)
-                if deriv_diff < rel_precision*apparent_derivatives[0] or deriv_diff < abs_precision:
-                    # Match... success!
-                    derivative = apparent_derivatives[0]
-                    done=True
-                    pass
                 pass
 
             # check for flip/flop
@@ -68,6 +93,22 @@ def gradient(location, function, rel_precision=1e-2,abs_precision=1e-8,initialre
             if np.isfinite(deriv_ratio) and deriv_ratio < 0.0:
                 num_flipflops += 1
                 pass
+
+            if debug:
+                print("armed=%s; gooditer=%s; flip_flop=%s" % (str(armed),str(gooditer),str(np.isfinite(deriv_ratio) and deriv_ratio < 0.0)))
+                pass
+
+            if armed and gooditer:
+                deriv_diff = abs(apparent_derivatives[0] - last_deriv)
+                print("deriv_diff = %g; rel_prec=%g; appar_dev=%g; last_deriv=%g" % (deriv_diff,rel_precision,apparent_derivatives[0],last_deriv))
+                if deriv_diff < rel_precision*abs(apparent_derivatives[0]) or deriv_diff < abs_precision:
+                    # Match... success!
+                    derivative = apparent_derivatives[0]
+                    done=True
+                    pass
+                pass
+
+
             
             # Prepare for next iteration
             if gooditer:
@@ -84,6 +125,9 @@ def gradient(location, function, rel_precision=1e-2,abs_precision=1e-8,initialre
                 done=True
                 pass
             
+            pass
+        if debug:
+            print("grad[%d]=%g" % (axis,derivative))
             pass
         
         grad[axis]=derivative
@@ -132,14 +176,16 @@ class mixednoise_vibro_estparam_op(gof.Op):
 
             prediction = self.prediction_function(mu,log_msqrtR)
 
-            
-            if use_accel and self.inhibit_accel_pid != os.getpid():
-                p_array = mixednoise_accel.integrate_lognormal_normal_convolution(mixednoise.mixednoise_op.lognormal_normal_convolution_integral_y_zero_to_eps,
+            #print("prediction=%s" % (str(prediction)))
+
+            if mixednoise.use_accel and self.inhibit_accel_pid != os.getpid():
+                p_array = integrate_lognormal_normal_convolution(mixednoise.mixednoise_op.lognormal_normal_convolution_integral_y_zero_to_eps,
                                                                                   None, # our evaluation cache is not compatible with that expected by mixednoise_accel
                                                                                   sigma_additive,
                                                                                   sigma_multiplicative,
                                                                                   prediction,
                                                                                   self.observed)
+                #print("p_array=%s" % (str(p_array)))
                 logp_total = np.sum(np.log(p_array))
                 pass
 
@@ -154,6 +200,7 @@ class mixednoise_vibro_estparam_op(gof.Op):
                                                                   mixednoise.mixednoise_op.lognormal_normal_convolution_kernel,
                                                                   sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed)
                     
+                    #print("p[%d]=%s" % (index,str(p)))
                     logp_total += np.log(p)
                     pass
                 pass
@@ -170,7 +217,7 @@ class mixednoise_vibro_estparam_op(gof.Op):
         (sigma_additive, sigma_multiplicative, mu, log_msqrtR) = inputs_storage[0]  # inputs_storage[0] is first (only) parameter, which should be a 4-element vector
         
         logp = self.evaluate_logp_total_from_cache(sigma_additive,sigma_multiplicative,mu,log_msqrtR)
-        outputs_storage[0][0]=logp
+        outputs_storage[0][0]=np.array(logp)
         pass
 
 
@@ -212,11 +259,19 @@ class mixednoise_vibro_estparam_op(gof.Op):
         return [ self.numerical_grad_op(sa_sm_mu_lm)*output_grads[0] ]
     
     def numerical_grad(self,sa_sm_mu_lm):
-        #(sigma_additive, sigma_multiplicative, mu, log_msqrtR) = sa_sm_mu_lm
+        (sigma_additive, sigma_multiplicative, mu, log_msqrtR) = sa_sm_mu_lm
+
+        if sigma_additive < 1e-4 or sigma_multiplicative < 1e-4:
+            # ridiculously small and outside reasonable domain; treat gradient as zero
+            grad=np.zeros(4,dtype='d')
+            self.non_convergences +=4 
+            self.num_derivatives +=4
+            return grad
+
 
         origfcn = lambda sa_sm_mu_lm : self.evaluate_logp_total_from_cache(*sa_sm_mu_lm)
-        
-        (grad,non_convergences) = gradient(sa_sm_mu_lm, origfcn)
+
+        (grad,non_convergences) = gradient(sa_sm_mu_lm, origfcn,initialrelstep=1e-2,rel_precision=1e-2)
 
         self.non_convergences += non_convergences
         self.num_derivatives += sa_sm_mu_lm.shape[0]
@@ -236,6 +291,11 @@ def CreateMixedNoiseVibroEstparam(name,sa_sm_mu_lm,
     def MixedNoiseLogP(sa_sm_mu_lm):
         # captures "MixedNoiseOp"
         return Print('MixedNoiseLogP')(MixedNoiseOp(sa_sm_mu_lm))
+    
+    # uncomment these next three lines to enable grad verification
+    #import theano.tests.unittest_tools
+    #theano.config.compute_test_value = "off"
+    #theano.tests.unittest_tools.verify_grad(MixedNoiseOp,[np.array((100.0,1.0,0.5,4.0),dtype='d')],abs_tol=1e-3,rel_tol=1e-3,eps=1e-4)
 
     return (MixedNoiseOp,pm.DensityDist(name,
                                         MixedNoiseLogP,

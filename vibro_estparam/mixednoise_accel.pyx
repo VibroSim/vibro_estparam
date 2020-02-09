@@ -71,7 +71,7 @@ def integrate_lognormal_normal_convolution(object lognormal_normal_convolution_i
     lognormal_normal_convolution_integral_y_zero_to_eps_c = <PyObject *>lognormal_normal_convolution_integral_y_zero_to_eps
     evaluation_cache_c = <PyObject *>evaluation_cache
 
-    if evaluate_cache is None:
+    if evaluation_cache is None:
         evaluation_cache_c = <PyObject *>NULL
         pass
     

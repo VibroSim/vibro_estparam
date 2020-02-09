@@ -305,6 +305,7 @@ class mixednoise_op(gof.Op):
         #print("Integration from y=%g... inf" % (bounds[4]))
 
         (p5,p5err) = scipy.integrate.quad(lambda y: kernel(sigma_additive,sigma_multiplicative,prediction_indexed,observed_indexed,y),bounds[4],np.inf,epsabs=1e-24)
+
         if not np.isfinite(singular_portion+p1+p2+p3+p4+p5):
             print("integrate_kernel returns %s from %s, %s, %s, %s, %s, and %s; p1err=%g, p2err=%g,p3err=%g,p4err=%g,p5err=%g" % (str(singular_portion+p1+p2+p3+p4+p5),str(singular_portion),str(p1),str(p2),str(p3),str(p4),str(p5),p1err,p2err,p3err,p4err,p5err))
             import pdb
