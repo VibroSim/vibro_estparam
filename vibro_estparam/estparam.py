@@ -600,14 +600,14 @@ class estparam(object):
                 #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
 
 
-                self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)) #self.predicted_crackheating_lower_bound + 
+                self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)) + self.predicted_crackheating_lower_bound 
                 
                 
             
                 (self.MixedNoiseOp,self.y_like) = CreateMixedNoise('y_like',
                                                                    self.sigma_additive,
                                                                    self.sigma_multiplicative,
-                                                                   prediction=self.predicted_crackheating*(self.crackheat_scalefactor+self.predicted_crackheating_lower_bound),
+                                                                   prediction=self.predicted_crackheating*self.crackheat_scalefactor,
                                                                    observed=self.crackheat_scalefactor*self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
                                                                    inhibit_accel_pid=inhibit_accel_pid) # ,shape=specimen_nums.shape[0])
                 pass
@@ -690,6 +690,14 @@ class estparam(object):
         sigma_additive_vals=trace_df["sigma_additive"].values/crackheat_scalefactor # self.trace.get_values("sigma_additive")/self.crackheat_scalefactor
         sigma_multiplicative_vals=trace_df["sigma_multiplicative"].values #self.trace.get_values("sigma_multiplicative")
         
+        # # read in predicted_crackheating
+        # predicted_crackheating=np.zeros((mu_vals.shape[0],self.crackheat_table["ThermalPower (W)"].values.shape[0]),dtype='d')
+        # for datapt_idx in range(self.crackheat_table["ThermalPower (W)"].values.shape[0]):
+        #     predicted_crackheating[:,datapt_idx] = trace_df["predicted_crackheating__%d" % (datapt_idx)]
+        #     pass
+
+        # prediction_factors = predicted_crackheating/(self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values)[np.newaxis,:]
+
         
         # Results
         mu_estimate = np.median(mu_vals)
@@ -778,7 +786,7 @@ class estparam(object):
         pl.clf()
         pl.hist(sigma_additive_vals,bins=marginal_bins,density=True)
         sa_range=np.linspace(0,pl.axis()[1],100)
-        pl.plot(sa_range,halfnormal(sa_range,sigma_additive_prior_sigma/crackheat_scalefactor),'-')
+        pl.plot(sa_range,halfnormal(sa_range,sigma_additive_prior_sigma_unscaled),'-')
         pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
         pl.xlabel('sigma_additive (J/cy)')
         pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
@@ -788,7 +796,7 @@ class estparam(object):
         pl.clf()
         pl.hist(sigma_additive_vals*1e3*excfreq_median,bins=marginal_bins,density=True)
         sap_range=np.linspace(0,pl.axis()[1],100) # note: sap_range is in mW
-        pl.plot(sap_range,halfnormal(sap_range/1e3/excfreq_median,sigma_additive_prior_sigma/crackheat_scalefactor)/1.e3/excfreq_median,'-')
+        pl.plot(sap_range,halfnormal(sap_range/1e3/excfreq_median,sigma_additive_prior_sigma_unscaled)/1.e3/excfreq_median,'-')
         pl.plot(sap_range,gaussian(sap_range/1e3/excfreq_median,sigma_additive_estimate,sigma_additive_sd)/1.e3/excfreq_median,'-')
         pl.xlabel('sigma_additive (mW) assuming typ freq of %f kHz' % (excfreq_median/1e3))
         pl.grid()
@@ -857,8 +865,6 @@ class estparam(object):
         specimen_group_specimens = list(specimen_grouping.groups) 
 
         markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()
-        
-
         prediction_plot = pl.figure()
         pl.clf()
         #pl.plot(predicted,self.actual,'x',
@@ -871,11 +877,12 @@ class estparam(object):
         pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
         pl.grid()
 
+        markerstyle_cyclerz=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()
         prediction_zoom_plot = pl.figure()
         pl.clf()
         #pl.plot(predicted,self.actual,'x',
         #        (0,np.max(predicted)),(0,np.max(predicted)),'-')
-        [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cycler)) for idx in range(len(specimen_group_specimens)) ] 
+        [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cyclerz)) for idx in range(len(specimen_group_specimens)) ] 
         pl.plot((0,np.max(predicted)*1.6*1e3),(0,np.max(predicted)*1.6*1e3),'-')
         pl.legend(specimen_group_specimens,loc='lower right')
         pl.axis((0,np.max(predicted)*0.25*1e3,0,np.max(predicted)*0.2*1e3))

@@ -120,6 +120,7 @@ def run(_xmldoc,_element,
         (("dc:crackheat_scalefactor",{"material": material_str}), numericunitsv(crackheat_scalefactor,"Unitless")),
         (("dc:excfreq_median",{"material": material_str}), numericunitsv(excfreq_median,"Hz")),
         (("dc:predicted_crackheating_lower_bound",{"material": material_str}), numericunitsv(predicted_crackheating_lower_bound,"W/Hz")),
+        (("dc:filter_outside_closure_domain",{"material": material_str}), filter_outside_closure_domain),
     ]
     
     return ret

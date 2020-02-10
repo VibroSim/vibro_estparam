@@ -8,6 +8,8 @@ import posixpath
 import subprocess
 import numpy as np
 
+import pandas as pd
+
 from limatix.dc_value import hrefvalue as hrefv
 from limatix.dc_value import numericunitsvalue as numericunitsv
 from limatix.dc_value import arrayvalue as arrayv
@@ -68,16 +70,10 @@ def run(_xmldoc,_element,
         pass
 
 
-
-    #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
-    estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
-
-    estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain_bool)
-
     trace_frame_el = _xmldoc.xpathsinglecontext(_element,"dc:trace_frame[@material='%s']" % (material_str))
     trace_frame_href = hrefv.fromxml(_xmldoc,trace_frame_el)
 
-    trace_df = pd.load_csv(trace_frame_href.getpath())
+    trace_df = pd.read_csv(trace_frame_href.getpath())
 
     mu_prior_mu = _xmldoc.xpathsinglecontextfloat(_element,"dc:mu_prior_mu[@material='%s']"  % (material_str))
     mu_prior_sigma = _xmldoc.xpathsinglecontextfloat(_element,"dc:mu_prior_sigma[@material='%s']" % (material_str))
@@ -101,7 +97,13 @@ def run(_xmldoc,_element,
     
     predicted_crackheating_lower_bound_el = _xmldoc.xpathsinglecontext(_element,"dc:predicted_crackheating_lower_bound[@material='%s']" % (material_str))
     predicted_crackheating_lower_bound = numericunitsv.fromxml(_xmldoc,predicted_crackheating_lower_bound_el).value("W/Hz")
+    
+    filter_outside_closure_domain = bool(_xmldoc.xpathsinglecontextstr(_element,"dc:filter_outside_closure_domain[@material='%s']" % (material_str)))
 
+    #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
+    estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
+
+    estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain)
 
     (results,plots) = estimator.plot_and_estimate(trace_df,
                                                   mu_prior_mu,
