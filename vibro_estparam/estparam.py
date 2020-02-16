@@ -627,7 +627,7 @@ class estparam(object):
                 
             self.step = pm.Metropolis()
             #self.step=pm.NUTS()
-            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune,discard_tuned_samples=True,random_seed=list(range(cores))) #tune=tune cores=cores chains=num_chains  ***!!! rememeber to unset random seed eventually!!!
+            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune,discard_tuned_samples=True) #tune=tune cores=cores chains=num_chains
             trace_df = pm.backends.tracetab.trace_to_dataframe(self.trace,include_transformed=True)
 
             excfreq_median = np.median(self.crackheat_table["ExcFreq (Hz)"].values)
