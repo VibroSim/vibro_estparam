@@ -966,7 +966,7 @@ class estparam(object):
 
     
     
-    def posterior_estimation_shear(self,mu_prior_mu,mu_prior_sigma,msqrtR_prior_mu,msqrtR_prior_sigma,sigma_additive_prior_sigma_unscaled,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma,steps_per_chain,num_chains,cores=None,tune=500):
+    def posterior_estimation_shear(self,mu_prior_mu,mu_prior_sigma,msqrtR_prior_mu,msqrtR_prior_sigma,sigma_additive_prior_mu_unscaled,sigma_additive_prior_sigma_unscaled,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma,steps_per_chain,num_chains,cores=None,tune=500):
         """Build and execute PyMC3 Model to obtain self.trace which 
         holds the chain samples
 
@@ -1000,13 +1000,17 @@ class estparam(object):
 
             #sigma_additive_prior_mu = 0.0
             self.predicted_crackheating_lower_bound=1e-12 # Joules/cycle or W/Hz... this is added to the predicted crack heating and should be in the noise. Used to avoid the problem of predicted heatings that are identically zero, making log(prediction) -infinity. 
+
             self.sigma_additive_prior_sigma_unscaled = sigma_additive_prior_sigma_unscaled
             self.sigma_additive_prior_sigma = self.sigma_additive_prior_sigma_unscaled*self.crackheat_scalefactor 
+            self.sigma_additive_prior_mu_unscaled = sigma_additive_prior_mu_unscaled
+            self.sigma_additive_prior_mu = self.sigma_additive_prior_mu_unscaled*self.crackheat_scalefactor 
             self.sigma_multiplicative_prior_mu = sigma_multiplicative_prior_mu #np.log(0.5)
             self.sigma_multiplicative_prior_sigma = sigma_multiplicative_prior_sigma
             
             # priors for sigma_additive and sigma_multiplicative
-            self.sigma_additive = Print('sigma_additive')(pm.HalfNormal("sigma_additive",sigma=self.sigma_additive_prior_sigma))
+            # Note that here (shear case) we use a normal prior for sigma_additive because the values have already been estimated for the normal case
+            self.sigma_additive = Print('sigma_additive')(pm.Normal("sigma_additive",mu=self.sigma_additive_prior_mu,sigma=self.sigma_additive_prior_sigma))
             self.sigma_additive_prior=pm.HalfNormal.dist(sigma=self.sigma_additive_prior_sigma)
             
             self.sigma_multiplicative = Print('sigma_multiplicative')(pm.Lognormal("sigma_multiplicative",mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma))
