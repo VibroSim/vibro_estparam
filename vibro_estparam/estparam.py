@@ -365,7 +365,7 @@ class estparam(object):
     
     
     
-    def predict_crackheating(self,mu,log_msqrtR):
+    def predict_crackheating(self,mu,log_msqrtR,log_crack_model_shear_factor=None):
         """Predict crackheating for each row in self.crackheat_table,
         given hypothesized single values for mu and log_msqrtR across the entire dataset"""
         
@@ -377,15 +377,25 @@ class estparam(object):
             surrogate_key = "bs_pa_" + self.crackheat_table["BendingStress (Pa)"].iloc[index] + "_dnsa_pa_" + self.crackheat_table["DynamicNormalStressAmpl (Pa)"].iloc[index] + "_dssa_pa_" + self.crackheat_table["DynamicShearStressAmpl (Pa)"].iloc[index]
 
             datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]) #.astype({"mu":np.float64,"log_msqrtR":np.float64})
-            datagrid = datagrid.append({"mu": float(mu),
-                                        #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
-                                        #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
-                                        "log_msqrtR": float(log_msqrtR)},ignore_index=True)
+            if log_crack_model_shear_factor is None:
+                datagrid = datagrid.append({"mu": float(mu),
+                                            #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                            #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                            "log_msqrtR": float(log_msqrtR)},ignore_index=True)
+                pass
+            else:
+                datagrid = datagrid.append({"mu": float(mu),
+                                            #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
+                                            #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
+                                            "log_msqrtR": float(log_msqrtR),
+                                            "log_crack_model_shear_factor": float(log_crack_model_shear_factor),
+                                        },ignore_index=True)                
+                pass
             retval[index]=self.crack_surrogates[self.crackheat_table["specimen_nums"].values[index]][surrogate_key].evaluate(datagrid,meanonly=True,accel_trisolve_devs=self.accel_trisolve_devs)["mean"][0]
             if not np.isfinite(retval[index]):
                 raise ValueError("Surrogate %s for specimen #%d evaluated to %g at %s" % (surrogate_key,self.crackheat_table["specimen_nums"].values[index],retval[index],str(datagrid)))
             pass
-
+            
         return retval
         
 
@@ -702,23 +712,35 @@ class estparam(object):
         # Results
         mu_estimate = np.median(mu_vals)
         mu_sd=np.std(mu_vals)
+        log_mu_estimate = np.median(np.log(mu_vals))
+        log_mu_sd=np.std(np.log(mu_vals))
         msqrtR_estimate = np.median(msqrtR_vals)
         msqrtR_sd=np.std(msqrtR_vals)
+        log_msqrtR_estimate = np.median(np.log(msqrtR_vals))
+        log_msqrtR_sd = np.std(np.log(msqrtR_vals))
         #self.log_msqrtR_estimate = np.median(np.log(msqrtR_vals))
         #self.log_msqrtR_sd=np.std(np.log(msqrtR_vals))
         sigma_additive_estimate = np.median(sigma_additive_vals)
         sigma_additive_sd=np.std(sigma_additive_vals)
         sigma_multiplicative_estimate = np.median(sigma_multiplicative_vals)
         sigma_multiplicative_sd=np.std(sigma_multiplicative_vals)
-
+        log_sigma_multiplicative_estimate = np.median(np.log(sigma_multiplicative_vals))
+        log_sigma_multiplicative_sd=np.std(np.log(sigma_multiplicative_vals))
+        
         results = (mu_estimate,
                    mu_sd,
+                   log_mu_estimate,
+                   log_mu_sd,
                    msqrtR_estimate,
                    msqrtR_sd,
+                   log_msqrtR_estimate,
+                   log_msqrtR_sd,
                    sigma_additive_estimate,
                    sigma_additive_sd,
                    sigma_multiplicative_estimate,
-                   sigma_multiplicative_sd)
+                   sigma_multiplicative_sd,
+                   log_sigma_multiplicative_estimate,
+                   log_sigma_multiplicative_sd)
         
         
         #traceplots=pl.figure()
@@ -756,8 +778,9 @@ class estparam(object):
         mu_range=np.linspace(0,pl.axis()[1],100)
         pl.plot(mu_range,lognormal(mu_range,mu_prior_mu,mu_prior_sigma),'-')
         pl.plot(mu_range,gaussian(mu_range,mu_estimate,mu_sd),'-')
+        pl.plot(mu_range,lognormal(mu_range,log_mu_estimate,log_mu_sd),'-')
         pl.xlabel('mu')
-        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
         
         
@@ -767,8 +790,9 @@ class estparam(object):
         msqrtR_range=np.linspace(0,pl.axis()[1],100)
         pl.plot(msqrtR_range,lognormal(msqrtR_range,msqrtR_prior_mu,msqrtR_prior_sigma),'-')
         pl.plot(msqrtR_range,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd),'-')
+        pl.plot(msqrtR_range,lognormal(msqrtR_range,log_msqrtR_estimate,log_msqrtR_sd),'-')
         pl.xlabel('m*sqrtR')
-        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
 
@@ -808,8 +832,9 @@ class estparam(object):
         sm_range=np.linspace(0,pl.axis()[1],100)
         pl.plot(sm_range,lognormal(sm_range,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma),'-')
         pl.plot(sm_range,gaussian(sm_range,sigma_multiplicative_estimate,sigma_multiplicative_sd),'-')
+        pl.plot(sm_range,lognormal(sm_range,log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd),'-')
         pl.xlabel('sigma_multiplicative')
-        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
         
@@ -817,13 +842,19 @@ class estparam(object):
 
         sigma_multiplicative_pdfs = pl.figure()
         pl.clf()
-        smp_range=np.linspace(0.001,4.0,200)
-        smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
-        pl.plot(smp_range,smp_function(smp_range,sigma_multiplicative_estimate),'-',
-                smp_range,smp_function(smp_range,sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd),'--',
-                smp_range,smp_function(smp_range,sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd),'--')
+        #smp_range=np.linspace(0.001,4.0,200)
+        #smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
+        #pl.plot(smp_range,smp_function(smp_range,sigma_multiplicative_estimate),'-',
+        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd),'--',
+        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd),'--')
+        log_smp_range=np.linspace(-7,1.4,200)
+        # sigma_multiplicative is log-normally distributed so log_sigma_multiplicative should be normally distributed
+        log_smp_function = lambda x,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x)**2.0)/(2.0*sigma**2.0))
+        pl.plot(np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate),'-',
+                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate-probit(.975)*log_sigma_multiplicative_sd),'--',
+                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate+probit(.975)*log_sigma_multiplicative_sd),'--')
         pl.xlabel('multiplier')
-        pl.title('Probability density for multiplicative error')
+        pl.title('Proportional to probability density for multiplicative error') # Only proportional because may not integrate to 1.0
         pl.legend(('Based on best estimate (median)','97.5% lower bound for 95% conf interval','97.5% upper bound for 95% conf interval'))
         pl.grid()
 
@@ -921,6 +952,466 @@ class estparam(object):
         
 
         return (results,plots)
+
+
+
+
+
+
+    
+    
+    def posterior_estimation_shear(self,mu_prior_mu,mu_prior_sigma,msqrtR_prior_mu,msqrtR_prior_sigma,sigma_additive_prior_sigma_unscaled,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma,steps_per_chain,num_chains,cores=None,tune=500):
+        """Build and execute PyMC3 Model to obtain self.trace which 
+        holds the chain samples
+
+        NOTE: Do not run posterior_estimation shear and posterior_estimation 
+        at the same time on the same estparam object!!!"""
+
+        self.model = pm.Model()
+    
+        with self.model:
+            #mu = pm.Uniform('mu',lower=0.01,upper=3.0)
+            #msqrtR = pm.Uniform('msqrtR',lower=500000,upper=50e6)
+
+            self.crackheat_scalefactor=1e10
+            self.mu_prior_mu = mu_prior_mu
+            self.mu_prior_sigma=mu_prior_sigma
+            self.mu = Print('mu')(pm.Lognormal('mu',mu=self.mu_prior_mu,sigma=self.mu_prior_sigma))
+            self.mu_prior = pm.Lognormal.dist(mu=self.mu_prior_mu,sigma=self.mu_prior_sigma)
+
+            self.msqrtR_prior_mu=msqrtR_prior_mu
+            self.msqrtR_prior_sigma=msqrtR_prior_sigma
+            
+            self.log_msqrtR = np.log(Print('msqrtR')(pm.Lognormal('msqrtR',mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)))  # !!!*** This might need to be changed.... the logarithm of a lognormal distribution is a normal distribution...
+            self.msqrtR_prior = pm.Lognormal.dist(mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)
+            
+            self.crack_model_shear_factor_prior_mu=0.0
+            self.crack_model_shear_factor_prior_sigma=0.5
+            self.crack_model_shear_factor=pm.Lognormal('crack_model_shear_factor',mu=self.crack_model_shear_factor_prior_mu,sigma=self.crack_model_shear_factor_prior_sigma)
+            self.crack_model_shear_factor_prior=pm.Lognormal.dist(mu=self.crack_model_shear_factor_prior_mu,sigma=self.crack_model_shear_factor_prior_sigma)
+            self.log_crack_model_shear_factor = np.log(crack_model_shear_factor)
+            
+
+            #sigma_additive_prior_mu = 0.0
+            self.predicted_crackheating_lower_bound=1e-12 # Joules/cycle or W/Hz... this is added to the predicted crack heating and should be in the noise. Used to avoid the problem of predicted heatings that are identically zero, making log(prediction) -infinity. 
+            self.sigma_additive_prior_sigma_unscaled = sigma_additive_prior_sigma_unscaled
+            self.sigma_additive_prior_sigma = self.sigma_additive_prior_sigma_unscaled*self.crackheat_scalefactor 
+            self.sigma_multiplicative_prior_mu = sigma_multiplicative_prior_mu #np.log(0.5)
+            self.sigma_multiplicative_prior_sigma = sigma_multiplicative_prior_sigma
+            
+            # priors for sigma_additive and sigma_multiplicative
+            self.sigma_additive = Print('sigma_additive')(pm.HalfNormal("sigma_additive",sigma=self.sigma_additive_prior_sigma))
+            self.sigma_additive_prior=pm.HalfNormal.dist(sigma=self.sigma_additive_prior_sigma)
+            
+            self.sigma_multiplicative = Print('sigma_multiplicative')(pm.Lognormal("sigma_multiplicative",mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma))
+            self.sigma_multiplicative_prior = pm.Lognormal.dist(mu=self.sigma_multiplicative_prior_mu,sigma=self.sigma_multiplicative_prior_sigma)
+
+            
+            # Add in a dummy observed variable that does not interact with the model
+            # This is in place because arviz (used for traceplot(), others)
+            # does a conversion called convert_to_dataset() on the PyMC3 
+            # samples. This conversion calls:
+            #   io_pymc3.py/to_inference_data() which calls 
+            #   io_pymc3.py/sample_stats_to_xarray() which calls 
+            #   io_pymc3.py/_extract_log_likelihood()
+            # In our context, extracting the log_likelihood is very slow
+            # because it seems to require many calls to the 
+            # predict_crackheating() function. Because these calls are in 
+            # the main process, not a worker process, they are not delegated
+            # to the GPU (GPU is disabled in main process, because if it 
+            # fork()s after GPU access subprocess GPU access will fail) 
+            # and evaluating the log_likelihood can take hours 
+            # even for a data set that was sampled in 5-10 minutes. 
+            #
+            # Within _extract_log_likelihood() there is a test:
+            #         if len(model.observed_RVs) != 1:
+            # That disables likelihood evaluation if there is more 
+            # than one observed random variable. 
+            #
+            # To trigger that test and disable likelihood evaluation, 
+            # we add this additional observed random variable that 
+            # is otherwise unused in the model
+            #
+            # Other workarounds might be possible; for example it seems
+            # likely that the evaluations would be for exactly 
+            # the same parameter values used in the sampling. 
+            # If so, somehow transferring a cache of predicted heating
+            # values to the main process would probably address the
+            # slowdown as well. 
+            self.dummy_observed_variable = pm.Normal('dummy_observed_variable',mu=0,sigma=1,observed=0.0)
+            
+
+            if cores > 1:
+                inhibit_accel_pid=os.getpid() # work around problems with OpenMP threads and Python multiprocessing by inhibiting threads except in the subprocesses
+                pass
+            else:
+                inhibit_accel_pid=None
+                pass
+
+            #self.bending_stress = pm.Normal('bending_stress',mu=50e6, sigma=10e6, observed=self.crackheat_table["BendingStress (Pa)"].values)
+            #self.dynamic_stress = pm.Normal('dynamic_stress',mu=20e6, sigma=5e6,observed=self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values)
+            #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
+            #self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
+            
+            self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar,tt.dscalar], otypes[tt.dvector])(self.predict_crackheating)
+            
+                
+                
+            # Create pymc3 predicted_crackheating expression
+            #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
+
+
+            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR,self.log_crack_normal_shear_factor)) + self.predicted_crackheating_lower_bound 
+                
+                
+            
+            (self.MixedNoiseOp,self.y_like) = CreateMixedNoise('y_like',
+                                                               self.sigma_additive,
+                                                               self.sigma_multiplicative,
+                                                               prediction=self.predicted_crackheating*self.crackheat_scalefactor,
+                                                               observed=self.crackheat_scalefactor*self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values,
+                                                               inhibit_accel_pid=inhibit_accel_pid) # ,shape=specimen_nums.shape[0])
+            
+            self.step = pm.Metropolis()
+            #self.step=pm.NUTS()
+            self.trace = pm.sample(steps_per_chain, step=self.step,chains=num_chains, cores=cores,tune=tune,discard_tuned_samples=True) #tune=tune cores=cores chains=num_chains
+            trace_df = pm.backends.tracetab.trace_to_dataframe(self.trace,include_transformed=True)
+
+            excfreq_median = np.median(self.crackheat_table["ExcFreq (Hz)"].values)
+            
+            return (trace_df,
+                    # Scalars
+                    crack_model_shear_factor_prior_mu,
+                    crack_model_shear_factor_prior_sigma,
+                    self.crackheat_scalefactor,
+                    excfreq_median,
+                    self.predicted_crackheating_lower_bound)
+        pass
+
+
+
+    
+    def plot_and_estimate_shear(self,
+                                trace_df,
+                                mu_prior_mu,
+                                mu_prior_sigma,
+                                msqrtR_prior_mu,
+                                msqrtR_prior_sigma,
+                                crack_model_shear_factor_prior_mu,
+                                crack_model_shear_factor_prior_sigma,
+                                sigma_additive_prior_sigma_unscaled,
+                                sigma_multiplicative_prior_mu,
+                                sigma_multiplicative_prior_sigma,
+                                crackheat_scalefactor,
+                                excfreq_median,
+                                predicted_crackheating_lower_bound,
+                                marginal_bins=50,joint_bins=(230,200)):
+        """ Create diagnostic histograms. Also return coordinates of 
+        joint histogram peak as estimates of mu and msqrtR"""
+
+        #trace_df["crackheat_scalefactor"]=self.crackheat_scalefactor
+        #trace_df["Median ExcFreq (Hz)"] = np.median(self.crackheat_table["ExcFreq (Hz)"].values)
+
+        from matplotlib import pyplot as pl
+        import cycler
+
+        ## Scalars
+        #mu_prior_mu=self.mu_prior_mu
+        #mu_prior_sigma=self.mu_prior_sigma
+        #msqrtR_prior_mu=self.msqrtR_prior_mu
+        #msqrtR_prior_sigma=self.msqrtR_prior_sigma
+        ##sigma_additive_prior_mu=self.sigma_additive_prior_mu
+        #sigma_additive_prior_sigma=self.sigma_additive_prior_sigma
+        #sigma_multiplicative_prior_mu=self.sigma_multiplicative_prior_mu
+        #sigma_multiplicative_prior_sigma=self.sigma_multiplicative_prior_sigma
+
+        
+        #crackheat_scalefactor=self.crackheat_scalefactor
+        #excfreq_median = np.median(self.crackheat_table["ExcFreq (Hz)"].values)
+
+        mu_vals=trace_df["mu"].values # self.trace.get_values("mu")
+        msqrtR_vals = trace_df["msqrtR"].values # self.trace.get_values("msqrtR")
+        crack_model_shear_factor_vals = trace_df["crack_model_shear_factor"].values # self.trace.get_values("msqrtR")
+        sigma_additive_vals=trace_df["sigma_additive"].values/crackheat_scalefactor # self.trace.get_values("sigma_additive")/self.crackheat_scalefactor
+        sigma_multiplicative_vals=trace_df["sigma_multiplicative"].values #self.trace.get_values("sigma_multiplicative")
+        
+        # # read in predicted_crackheating
+        # predicted_crackheating=np.zeros((mu_vals.shape[0],self.crackheat_table["ThermalPower (W)"].values.shape[0]),dtype='d')
+        # for datapt_idx in range(self.crackheat_table["ThermalPower (W)"].values.shape[0]):
+        #     predicted_crackheating[:,datapt_idx] = trace_df["predicted_crackheating__%d" % (datapt_idx)]
+        #     pass
+
+        # prediction_factors = predicted_crackheating/(self.crackheat_table["ThermalPower (W)"].values/self.crackheat_table["ExcFreq (Hz)"].values)[np.newaxis,:]
+        
+        # Results
+        mu_estimate = np.median(mu_vals)
+        mu_sd=np.std(mu_vals)
+        log_mu_estimate = np.median(np.log(mu_vals))
+        log_mu_sd=np.std(np.log(mu_vals))
+        msqrtR_estimate = np.median(msqrtR_vals)
+        msqrtR_sd=np.std(msqrtR_vals)
+        log_msqrtR_estimate = np.median(np.log(msqrtR_vals))
+        log_msqrtR_sd = np.std(np.log(msqrtR_vals))
+        crack_model_shear_factor_estimate = np.median(crack_model_shear_factor_vals)
+        crack_model_shear_factor_sd = np.std(crack_model_shear_factor_vals)
+        log_crack_model_shear_factor_estimate = np.median(np.log(crack_model_shear_factor_vals))
+        log_crack_model_shear_factor_sd = np.std(np.log(crack_model_shear_factor_vals))
+        #self.log_msqrtR_estimate = np.median(np.log(msqrtR_vals))
+        #self.log_msqrtR_sd=np.std(np.log(msqrtR_vals))
+        sigma_additive_estimate = np.median(sigma_additive_vals)
+        sigma_additive_sd=np.std(sigma_additive_vals)
+        sigma_multiplicative_estimate = np.median(sigma_multiplicative_vals)
+        sigma_multiplicative_sd=np.std(sigma_multiplicative_vals)
+        log_sigma_multiplicative_estimate = np.median(np.log(sigma_multiplicative_vals))
+        log_sigma_multiplicative_sd=np.std(np.log(sigma_multiplicative_vals))
+        
+
+        results = (mu_estimate,
+                   mu_sd,
+                   log_mu_estimate,
+                   log_mu_sd,
+                   msqrtR_estimate,
+                   msqrtR_sd,
+                   log_msqrtR_estimate,
+                   log_msqrtR_sd,
+                   crack_model_shear_factor_estimate,
+                   crack_model_shear_factor_sd,
+                   log_crack_model_shear_factor_estimate,
+                   log_crack_model_shear_factor_sd,
+                   sigma_additive_estimate,
+                   sigma_additive_sd,
+                   sigma_multiplicative_estimate,
+                   sigma_multiplicative_sd,
+                   log_sigma_multiplicative_estimate,
+                   log_sigma_multiplicative_sd)
+        
+        
+        #traceplots=pl.figure()
+
+        # Current arviz traceplots do not work because of attempt to access 'observed' member 
+        #     https://discourse.pymc.io/t/pm-traceplot-error/3524/8
+        #     https://github.com/arviz-devs/arviz/pull/731
+        # ... Attempted to apply patch to installed copy, but it did not help
+        #traceplot_axes = pm.traceplot(self.trace)
+        #traceplots = traceplot_axes[0,0].figure
+        
+        traceplots = pl.figure()
+        pl.subplot(3,2,1)
+        pl.plot(mu_vals)
+        pl.title('mu')
+        pl.subplot(3,2,2)
+        pl.plot(msqrtR_vals)
+        pl.title('msqrtR')
+        pl.subplot(3,2,3)
+        pl.plot(crack_model_shear_factor_vals)
+        pl.title('crack_model_shear_factor')
+        pl.subplot(3,2,4)
+        pl.plot(sigma_additive_vals)
+        pl.title('sigma_additive')
+        pl.subplot(3,2,5)
+        pl.plot(sigma_multiplicative_vals)
+        pl.title('sigma_multiplicative')
+        
+
+        
+        gaussian = lambda x,mu,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x-mu)**2.0)/(2.0*sigma**2.0))
+        lognormal = lambda x,mu,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x)-mu)**2.0)/(2.0*sigma**2.0))
+        halfnormal = lambda x,sigma: (np.sqrt(2)/(sigma*np.sqrt(np.pi)))*np.exp(-(x**2.0)/(2.0*sigma**2.0))        
+
+        mu_hist = pl.figure()
+        pl.clf()
+        pl.hist(mu_vals,bins=marginal_bins,density=True)
+        mu_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(mu_range,lognormal(mu_range,mu_prior_mu,mu_prior_sigma),'-')
+        pl.plot(mu_range,gaussian(mu_range,mu_estimate,mu_sd),'-')
+        pl.plot(mu_range,lognormal(mu_range,log_mu_estimate,log_mu_sd),'-')
+        pl.xlabel('mu')
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
+        pl.grid()
+        
+        
+        msqrtR_hist = pl.figure()
+        pl.clf()
+        pl.hist(msqrtR_vals,bins=marginal_bins,density=True)
+        msqrtR_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(msqrtR_range,lognormal(msqrtR_range,msqrtR_prior_mu,msqrtR_prior_sigma),'-')
+        pl.plot(msqrtR_range,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd),'-')
+        pl.plot(msqrtR_range,lognormal(msqrtR_range,log_msqrtR_estimate,log_msqrtR_sd),'-')
+        pl.xlabel('m*sqrtR')
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
+        pl.grid()
+
+        crack_model_shear_factor_hist = pl.figure()
+        pl.clf()
+        pl.hist(crack_model_shear_factor_vals,bins=marginal_bins,density=True)
+        crack_model_shear_factor_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(crack_model_shear_factor_range,lognormal(crack_model_shear_factor_range,crack_model_shear_factor_prior_mu,crack_model_shear_factor_prior_sigma),'-')
+        pl.plot(crack_model_shear_factor_range,gaussian(crack_model_shear_factor_range,crack_model_shear_factor_estimate,crack_model_shear_factor_sd),'-')
+        pl.plot(crack_model_shear_factor_range,lognormal(crack_model_shear_factor_range,log_crack_model_shear_factor_estimate,log_crack_model_shear_factor_sd),'-')
+        pl.xlabel('crack_model_shear_factor')
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
+        pl.grid()
+
+
+        #log_msqrtR_hist = pl.figure()
+        #pl.clf()
+        #pl.hist(np.log(msqrtR_vals),bins=marginal_bins,density=True)
+        #log_msqrtR_range=np.linspace(0,pl.axis()[1],100)
+        #pl.plot(log_msqrtR_range,np.exp(self.msqrtR_prior.logp(np.exp(log_msqrtR_range))).eval(),'-')
+        #pl.plot(log_msqrtR_range,gaussian(log_msqrtR_range,self.log_msqrtR_estimate,self.log_msqrtR_sd),'-')
+        #pl.xlabel('log(m*sqrtR)')
+        #pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        #pl.grid()
+
+        sigma_additive_hist = pl.figure()
+        pl.clf()
+        pl.hist(sigma_additive_vals,bins=marginal_bins,density=True)
+        sa_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(sa_range,halfnormal(sa_range,sigma_additive_prior_sigma_unscaled),'-')
+        pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
+        pl.xlabel('sigma_additive (J/cy)')
+        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.grid()
+
+        sigma_additive_power_hist = pl.figure()
+        pl.clf()
+        pl.hist(sigma_additive_vals*1e3*excfreq_median,bins=marginal_bins,density=True)
+        sap_range=np.linspace(0,pl.axis()[1],100) # note: sap_range is in mW
+        pl.plot(sap_range,halfnormal(sap_range/1e3/excfreq_median,sigma_additive_prior_sigma_unscaled)/1.e3/excfreq_median,'-')
+        pl.plot(sap_range,gaussian(sap_range/1e3/excfreq_median,sigma_additive_estimate,sigma_additive_sd)/1.e3/excfreq_median,'-')
+        pl.xlabel('sigma_additive (mW) assuming typ freq of %f kHz' % (excfreq_median/1e3))
+        pl.grid()
+
+
+        sigma_multiplicative_hist = pl.figure()
+        pl.clf()
+        pl.hist(sigma_multiplicative_vals,bins=marginal_bins,density=True)
+        sm_range=np.linspace(0,pl.axis()[1],100)
+        pl.plot(sm_range,lognormal(sm_range,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma),'-')
+        pl.plot(sm_range,gaussian(sm_range,sigma_multiplicative_estimate,sigma_multiplicative_sd),'-')
+        pl.plot(sm_range,lognormal(sm_range,log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd),'-')
+        pl.xlabel('sigma_multiplicative')
+        pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
+        pl.grid()
+
+        
+        probit = lambda x: np.sqrt(2)*scipy.special.erfinv(2.0*x-1.0)
+
+        sigma_multiplicative_pdfs = pl.figure()
+        pl.clf()
+        #smp_range=np.linspace(0.001,4.0,200)
+        #smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
+        #pl.plot(smp_range,smp_function(smp_range,sigma_multiplicative_estimate),'-',
+        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd),'--',
+        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd),'--')
+        log_smp_range=np.linspace(-7,1.4,200)
+        # sigma_multiplicative is log-normally distributed so log_sigma_multiplicative should be normally distributed
+        log_smp_function = lambda x,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x)**2.0)/(2.0*sigma**2.0))
+        pl.plot(np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate),'-',
+                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate-probit(.975)*log_sigma_multiplicative_sd),'--',
+                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate+probit(.975)*log_sigma_multiplicative_sd),'--')
+        pl.xlabel('multiplier')
+        pl.title('Proportional to probability density for multiplicative error') # Only proportional because may not integrate to 1.0
+        pl.legend(('Based on best estimate (median)','97.5% lower bound for 95% conf interval','97.5% upper bound for 95% conf interval'))
+        pl.grid()
+
+        
+    
+        joint_hist = pl.figure()
+        pl.clf()
+        (hist,hist_mu_edges,hist_msqrtR_edges,hist_image)=pl.hist2d(mu_vals,msqrtR_vals,
+                                                                    range=((mu_estimate-3.0*mu_sd,
+                                                                            mu_estimate+3.0*mu_sd),
+                                                                           (msqrtR_estimate-3.0*msqrtR_sd,
+                                                                            msqrtR_estimate+3.0*msqrtR_sd)),
+                                                                    bins=joint_bins)
+        pl.grid()
+        pl.colorbar()
+        pl.xlabel('mu')
+        pl.ylabel('m*sqrt(R) (sqrt(m)/m^2)')
+        
+        #histpeakpos = np.unravel_index(np.argmax(hist,axis=None),hist.shape)
+        #self.mu_estimate = (hist_mu_edges[histpeakpos[0]]+hist_mu_edges[histpeakpos[0]+1])/2.0
+        #self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
+    
+        # Compare
+        predicted = self.predict_crackheating(mu_estimate,np.log(msqrtR_estimate))*self.crackheat_table["ExcFreq (Hz)"].values
+        
+        # add to crackheat_table
+        
+        self.crackheat_table["predicted"]=predicted
+
+        ## with:
+        #self.actual = self.crackheat_table["ThermalPower (W)"].values
+
+        # Group predicted and actual heating by specimen
+        specimen_grouping = self.crackheat_table.groupby("Specimen")
+
+        specimen_groups = [ specimen_grouping.get_group(specimen) for specimen in specimen_grouping.groups ]
+        predicted_by_specimen = [ specimen_group["predicted"].values for specimen_group in specimen_groups ]
+        actual_by_specimen = [ specimen_group["ThermalPower (W)"].values for specimen_group in specimen_groups ]
+        specimen_group_specimens = list(specimen_grouping.groups) 
+
+        markerstyle_cycler=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()
+        prediction_plot = pl.figure()
+        pl.clf()
+        #pl.plot(predicted,self.actual,'x',
+        #        (0,np.max(predicted)),(0,np.max(predicted)),'-')
+        [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cycler)) for idx in range(len(specimen_group_specimens)) ] 
+        pl.plot((0,np.max(predicted)*1.6*1e3),(0,np.max(predicted)*1.6*1e3),'-')
+        pl.legend(specimen_group_specimens,loc='lower right')
+        pl.xlabel('Predicted heating from model (mW)')
+        pl.ylabel('Actual heating from experiment (mW)')
+        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
+        pl.grid()
+
+        markerstyle_cyclerz=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()
+        prediction_zoom_plot = pl.figure()
+        pl.clf()
+        #pl.plot(predicted,self.actual,'x',
+        #        (0,np.max(predicted)),(0,np.max(predicted)),'-')
+        [ pl.plot(predicted_by_specimen[idx]*1e3,actual_by_specimen[idx]*1e3,linestyle='',**next(markerstyle_cyclerz)) for idx in range(len(specimen_group_specimens)) ] 
+        pl.plot((0,np.max(predicted)*1.6*1e3),(0,np.max(predicted)*1.6*1e3),'-')
+        pl.legend(specimen_group_specimens,loc='lower right')
+        pl.axis((0,np.max(predicted)*0.25*1e3,0,np.max(predicted)*0.2*1e3))
+        pl.xlabel('Predicted heating from model (mW)')
+        pl.ylabel('Actual heating from experiment (mW)')
+        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
+        pl.grid()
+
+
+        plots = (traceplots,
+                 mu_hist,
+                 msqrtR_hist,
+                 crack_model_shear_factor_hist,
+                 sigma_additive_hist,
+                 sigma_additive_power_hist,
+                 sigma_multiplicative_hist,
+                 sigma_multiplicative_pdfs,
+                 joint_hist,
+                 prediction_plot,
+                 prediction_zoom_plot)
+        
+        # self.MixedNoiseOp(theano.shared(self.trace.get_values("sigma_additive")[0]),theano.shared(self.trace.get_values("sigma_multiplicative")[0]),theano.shared(self.trace.get_values("predicted_crackheating")[0,:])).eval() ... gives log(p) = 10
+        # self.MixedNoiseOp.evaluate_p_from_cache(self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,0],self.MixedNoiseOp.observed[0])
+        
+        #pdf_integral1 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*crackheat_scalefactor,obs),150.0,np.inf)[0]
+
+        #pdf_integral2 = scipy.integrate.quad(lambda obs: self.MixedNoiseOp.integrate_kernel(self.MixedNoiseOp.lognormal_normal_convolution_integral_y_zero_to_eps,self.MixedNoiseOp.lognormal_normal_convolution_kernel,self.trace.get_values("sigma_additive")[0],self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,1]*crackheat_scalefactor,obs),.0000001,150.0)[0]
+        
+        #import theano.tests.unittest_tools
+        #theano.config.compute_test_value = "off"
+
+        #theano.tests.unittest_tools.verify_grad(self.MixedNoiseOp,[ self.trace.get_values("sigma_additive")[0], self.trace.get_values("sigma_multiplicative")[0],self.trace.get_values("predicted_crackheating")[0,:]*self.crackheat_scalefactor ],abs_tol=1e-12,rel_tol=1e-5,eps=1e-7)
+
+        #raise ValueError("Foo!")
+
+        #return (self.mu_estimate,self.msqrtR_estimate,traceplots,mu_hist,msqrtR_hist,joint_hist,prediction_plot)
+        
+
+        return (results,plots)
+
+
 
 
         
