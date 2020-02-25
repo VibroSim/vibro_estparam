@@ -845,20 +845,22 @@ class estparam(object):
         probit = lambda x: np.sqrt(2)*scipy.special.erfinv(2.0*x-1.0)
 
         sigma_multiplicative_pdfs = pl.figure()
+        # heating is multiplied by multiplicative noise which is presumed to be lognormally distributed with a mu of ln(predicted heating) and variance of sigma_multiplicative_estimate
+        # For this plot we represent it relative ot a predicted heating of 1.0 so ln(predicted heating) = 0 
         pl.clf()
-        #smp_range=np.linspace(0.001,4.0,200)
-        #smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
-        #pl.plot(smp_range,smp_function(smp_range,sigma_multiplicative_estimate),'-',
-        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd),'--',
-        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd),'--')
-        log_smp_range=np.linspace(-7,1.4,200)
-        # sigma_multiplicative is log-normally distributed so log_sigma_multiplicative should be normally distributed
-        log_smp_function = lambda x,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x)**2.0)/(2.0*sigma**2.0))
-        pl.plot(np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate),'-',
-                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate-probit(.975)*log_sigma_multiplicative_sd),'--',
-                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate+probit(.975)*log_sigma_multiplicative_sd),'--')
+        smp_range=np.linspace(0.001,4.0,200)
+        smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
+        pl.plot(smp_range,smp_function(smp_range,np.exp(log_sigma_multiplicative_estimate)),'-',
+                smp_range,smp_function(smp_range,np.exp(log_sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd)),'--',
+                smp_range,smp_function(smp_range,np.exp(log_sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd)),'--')
+        #log_smp_range=np.linspace(-7,1.4,200)
+        ## sigma_multiplicative is log-normally distributed so log_sigma_multiplicative should be normally distributed
+        #log_smp_function = lambda x,mu,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x-mu)**2.0)/(2.0*sigma**2.0))
+        #pl.plot(np.exp(log_smp_range),log_smp_function(log_smp_range,0,np.exp(log_sigma_multiplicative_estimate)),'-',
+        #        np.exp(log_smp_range),log_smp_function(log_smp_range,0,np.exp(log_sigma_multiplicative_estimate-probit(.975)*log_sigma_multiplicative_sd)),'--',
+        #np.exp(log_smp_range),log_smp_function(log_smp_range,0,np.exp(log_sigma_multiplicative_estimate+probit(.975)*log_sigma_multiplicative_sd)),'--')
         pl.xlabel('multiplier')
-        pl.title('Proportional to probability density for multiplicative error') # Only proportional because may not integrate to 1.0
+        pl.title('Probability density for multiplicative error') 
         pl.legend(('Based on best estimate (median)','97.5% lower bound for 95% conf interval','97.5% upper bound for 95% conf interval'))
         pl.grid()
 
@@ -1057,7 +1059,8 @@ class estparam(object):
             #self.cracknum = pm.DiscreteUniform('cracknum',lower=0,upper=len(self.crack_specimens)-1,observed=self.crackheat_table["specimen_nums"].values)
             #self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar], otypes = [tt.dvector])(self.predict_crackheating)
             
-            self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar,tt.dscalar], otypes[tt.dvector])(self.predict_crackheating)
+            # Shear calculation doesn't support derivatives so we can just use as_op()
+            self.predict_crackheating_op_instance = as_op(itypes=[tt.dscalar,tt.dscalar,tt.dscalar], otypes=[tt.dvector])(self.predict_crackheating)
             
                 
                 
@@ -1307,20 +1310,22 @@ class estparam(object):
         probit = lambda x: np.sqrt(2)*scipy.special.erfinv(2.0*x-1.0)
 
         sigma_multiplicative_pdfs = pl.figure()
+        # heating is multiplied by multiplicative noise which is presumed to be lognormally distributed with a mu of ln(predicted heating) and variance of sigma_multiplicative_estimate
+        # For this plot we represent it relative ot a predicted heating of 1.0 so ln(predicted heating) = 0 
         pl.clf()
-        #smp_range=np.linspace(0.001,4.0,200)
-        #smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
-        #pl.plot(smp_range,smp_function(smp_range,sigma_multiplicative_estimate),'-',
-        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd),'--',
-        #        smp_range,smp_function(smp_range,sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd),'--')
-        log_smp_range=np.linspace(-7,1.4,200)
-        # sigma_multiplicative is log-normally distributed so log_sigma_multiplicative should be normally distributed
-        log_smp_function = lambda x,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x)**2.0)/(2.0*sigma**2.0))
-        pl.plot(np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate),'-',
-                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate-probit(.975)*log_sigma_multiplicative_sd),'--',
-                np.exp(log_smp_range),smp_function(log_smp_range,log_sigma_multiplicative_estimate+probit(.975)*log_sigma_multiplicative_sd),'--')
+        smp_range=np.linspace(0.001,4.0,200)
+        smp_function = lambda x,sigma : (1.0/(x*sigma*np.sqrt(2.0*np.pi)))*np.exp(-((np.log(x))**2.0)/(2.0*sigma**2.0))
+        pl.plot(smp_range,smp_function(smp_range,np.exp(log_sigma_multiplicative_estimate)),'-',
+                smp_range,smp_function(smp_range,np.exp(log_sigma_multiplicative_estimate-probit(.975)*sigma_multiplicative_sd)),'--',
+                smp_range,smp_function(smp_range,np.exp(log_sigma_multiplicative_estimate+probit(.975)*sigma_multiplicative_sd)),'--')
+        #log_smp_range=np.linspace(-7,1.4,200)
+        ## sigma_multiplicative is log-normally distributed so log_sigma_multiplicative should be normally distributed
+        #log_smp_function = lambda x,mu,sigma : (1.0/(sigma*np.sqrt(2.0*np.pi)))*np.exp(-((x-mu)**2.0)/(2.0*sigma**2.0))
+        #pl.plot(np.exp(log_smp_range),log_smp_function(log_smp_range,0,np.exp(log_sigma_multiplicative_estimate)),'-',
+        #        np.exp(log_smp_range),log_smp_function(log_smp_range,0,np.exp(log_sigma_multiplicative_estimate-probit(.975)*log_sigma_multiplicative_sd)),'--',
+        #np.exp(log_smp_range),log_smp_function(log_smp_range,0,np.exp(log_sigma_multiplicative_estimate+probit(.975)*log_sigma_multiplicative_sd)),'--')
         pl.xlabel('multiplier')
-        pl.title('Proportional to probability density for multiplicative error') # Only proportional because may not integrate to 1.0
+        pl.title('Probability density for multiplicative error') 
         pl.legend(('Based on best estimate (median)','97.5% lower bound for 95% conf interval','97.5% upper bound for 95% conf interval'))
         pl.grid()
 
