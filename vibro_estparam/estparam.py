@@ -780,6 +780,7 @@ class estparam(object):
         pl.plot(mu_range,gaussian(mu_range,mu_estimate,mu_sd),'-')
         pl.plot(mu_range,lognormal(mu_range,log_mu_estimate,log_mu_sd),'-')
         pl.xlabel('mu')
+        pl.title('mu lognormal mu = %g; mu lognormal sd = %g' % (log_mu_estimate,log_mu_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
         
@@ -792,6 +793,7 @@ class estparam(object):
         pl.plot(msqrtR_range,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd),'-')
         pl.plot(msqrtR_range,lognormal(msqrtR_range,log_msqrtR_estimate,log_msqrtR_sd),'-')
         pl.xlabel('m*sqrtR')
+        pl.title('m*sqrtR lognormal mu = %g; m*sqrtR lognormal sd = %g' % (log_msqrtR_estimate,log_msqrtR_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
@@ -814,6 +816,7 @@ class estparam(object):
         pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
         pl.xlabel('sigma_additive (J/cy)')
         pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.title('sigma_additive normal mu = %g; sigma_additive normal sd = %g' % (sigma_additive_estimate,sigma_additive_sd))
         pl.grid()
 
         sigma_additive_power_hist = pl.figure()
@@ -834,6 +837,7 @@ class estparam(object):
         pl.plot(sm_range,gaussian(sm_range,sigma_multiplicative_estimate,sigma_multiplicative_sd),'-')
         pl.plot(sm_range,lognormal(sm_range,log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd),'-')
         pl.xlabel('sigma_multiplicative')
+        pl.title('sigma_mul lognormal mu = %g; sigma_mul lognormal sd = %g' % (log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
@@ -1226,6 +1230,7 @@ class estparam(object):
         pl.plot(mu_range,gaussian(mu_range,mu_estimate,mu_sd),'-')
         pl.plot(mu_range,lognormal(mu_range,log_mu_estimate,log_mu_sd),'-')
         pl.xlabel('mu')
+        pl.title('mu lognormal mu = %g; mu lognormal sd = %g' % (log_mu_estimate,log_mu_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
         
@@ -1238,6 +1243,7 @@ class estparam(object):
         pl.plot(msqrtR_range,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd),'-')
         pl.plot(msqrtR_range,lognormal(msqrtR_range,log_msqrtR_estimate,log_msqrtR_sd),'-')
         pl.xlabel('m*sqrtR')
+        pl.title('m*sqrtR lognormal mu = %g; m*sqrtR lognormal sd = %g' % (log_msqrtR_estimate,log_msqrtR_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
@@ -1249,6 +1255,7 @@ class estparam(object):
         pl.plot(crack_model_shear_factor_range,gaussian(crack_model_shear_factor_range,crack_model_shear_factor_estimate,crack_model_shear_factor_sd),'-')
         pl.plot(crack_model_shear_factor_range,lognormal(crack_model_shear_factor_range,log_crack_model_shear_factor_estimate,log_crack_model_shear_factor_sd),'-')
         pl.xlabel('crack_model_shear_factor')
+        pl.title('shearfact lognormal mu = %g; shearfact lognormal sd = %g' % (log_crack_model_shear_factor_estimate,log_crack_model_shear_factor_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
@@ -1271,6 +1278,7 @@ class estparam(object):
         pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
         pl.xlabel('sigma_additive (J/cy)')
         pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.title('sigma_additive normal mu = %g; sigma_additive normal sd = %g' % (sigma_additive_estimate,sigma_additive_sd))
         pl.grid()
 
         sigma_additive_power_hist = pl.figure()
@@ -1291,6 +1299,7 @@ class estparam(object):
         pl.plot(sm_range,gaussian(sm_range,sigma_multiplicative_estimate,sigma_multiplicative_sd),'-')
         pl.plot(sm_range,lognormal(sm_range,log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd),'-')
         pl.xlabel('sigma_multiplicative')
+        pl.title('sigma_mul lognormal mu = %g; sigma_mul lognormal sd = %g' % (log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
