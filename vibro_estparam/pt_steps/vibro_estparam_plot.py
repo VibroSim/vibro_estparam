@@ -98,7 +98,7 @@ def run(_xmldoc,_element,
     predicted_crackheating_lower_bound_el = _xmldoc.xpathsinglecontext(_element,"dc:predicted_crackheating_lower_bound[@material='%s']" % (material_str))
     predicted_crackheating_lower_bound = numericunitsv.fromxml(_xmldoc,predicted_crackheating_lower_bound_el).value("W/Hz")
     
-    filter_outside_closure_domain = bool(_xmldoc.xpathsinglecontextstr(_element,"dc:filter_outside_closure_domain[@material='%s']" % (material_str)))
+    filter_outside_closure_domain = bool(ast.literal_eval(_xmldoc.xpathsinglecontextstr(_element,"dc:filter_outside_closure_domain[@material='%s']" % (material_str))))
 
     #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
     estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)

@@ -91,6 +91,10 @@ def run(_xmldoc,_element,
     crack_model_shear_factor_prior_mu = numericunitsv.fromxml(_xmldoc,crack_model_shear_factor_prior_mu_el).value("Unitless")
     crack_model_shear_factor_prior_sigma = numericunitsv.fromxml(_xmldoc,crack_model_shear_factor_prior_sigma_el).value("Unitless")
     
+
+    sigma_additive_prior_mu_unscaled_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_additive_prior_mu_unscaled[@material='%s']" % (material_str))
+    sigma_additive_prior_mu_unscaled = numericunitsv.fromxml(_xmldoc,sigma_additive_prior_mu_unscaled_el).value("W/Hz")
+
     sigma_additive_prior_sigma_unscaled_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_additive_prior_sigma_unscaled[@material='%s']" % (material_str))
     sigma_additive_prior_sigma_unscaled = numericunitsv.fromxml(_xmldoc,sigma_additive_prior_sigma_unscaled_el).value("W/Hz")
     
@@ -105,12 +109,12 @@ def run(_xmldoc,_element,
     predicted_crackheating_lower_bound_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_predicted_crackheating_lower_bound[@material='%s']" % (material_str))
     predicted_crackheating_lower_bound = numericunitsv.fromxml(_xmldoc,predicted_crackheating_lower_bound_el).value("W/Hz")
     
-    filter_outside_closure_domain = bool(_xmldoc.xpathsinglecontextstr(_element,"dc:shear_filter_outside_closure_domain[@material='%s']" % (material_str)))
+    filter_outside_closure_domain = bool(ast.literal_eval(_xmldoc.xpathsinglecontextstr(_element,"dc:shear_filter_outside_closure_domain[@material='%s']" % (material_str))))
 
     #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
     estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
 
-    estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain)
+    estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain,shear=True)
     
     (results,plots) = estimator.plot_and_estimate_shear(trace_df,
                                                         mu_prior_mu,
@@ -119,6 +123,7 @@ def run(_xmldoc,_element,
                                                         msqrtR_prior_sigma,
                                                         crack_model_shear_factor_prior_mu,
                                                         crack_model_shear_factor_prior_sigma,
+                                                        sigma_additive_prior_mu_unscaled,
                                                         sigma_additive_prior_sigma_unscaled,
                                                         sigma_multiplicative_prior_mu,
                                                         sigma_multiplicative_prior_sigma,

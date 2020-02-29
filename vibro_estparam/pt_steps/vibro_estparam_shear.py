@@ -40,28 +40,28 @@ def run(_xmldoc,_element,
     accel_trisolve_devs = None
 
 
-    mu_prior_mu_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_mu_prior_mu[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    mu_prior_mu_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_mu_prior_mu[@material=%s]" % (string_to_etxpath_expression(material_str)))
     mu_prior_mu = numericunitsv.fromxml(_xmldoc,mu_prior_mu_el).value("Unitless")
 
-    mu_prior_sigma_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_mu_prior_sigma[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    mu_prior_sigma_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_mu_prior_sigma[@material=%s]" % (string_to_etxpath_expression(material_str)))
     mu_prior_sigma = numericunitsv.fromxml(_xmldoc,mu_prior_sigma_el).value("Unitless")
 
-    msqrtR_prior_mu_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_msqrtR_prior_mu[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    msqrtR_prior_mu_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_msqrtR_prior_mu[@material=%s]" % (string_to_etxpath_expression(material_str)))
     msqrtR_prior_mu = numericunitsv.fromxml(_xmldoc,msqrtR_prior_mu_el).value("ln_meters*-1.5")
 
-    msqrtR_prior_sigma_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_msqrtR_prior_sigma[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    msqrtR_prior_sigma_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_msqrtR_prior_sigma[@material=%s]" % (string_to_etxpath_expression(material_str)))
     msqrtR_prior_sigma = numericunitsv.fromxml(_xmldoc,msqrtR_prior_sigma_el).value("ln_meters*-1.5")
 
-    sigma_additive_prior_mu_unscaled_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_additive_prior_mu_unscaled[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    sigma_additive_prior_mu_unscaled_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_additive_prior_mu_unscaled[@material=%s]" % (string_to_etxpath_expression(material_str)))
     sigma_additive_prior_mu_unscaled = numericunitsv.fromxml(_xmldoc,sigma_additive_prior_mu_unscaled_el).value("W/Hz")
 
-    sigma_additive_prior_sigma_unscaled_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_additive_prior_sigma_unscaled[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    sigma_additive_prior_sigma_unscaled_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_additive_prior_sigma_unscaled[@material=%s]" % (string_to_etxpath_expression(material_str)))
     sigma_additive_prior_sigma_unscaled = numericunitsv.fromxml(_xmldoc,sigma_additive_prior_sigma_unscaled_el).value("W/Hz")
 
-    sigma_multiplicative_prior_mu_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_multiplicative_prior_mu[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    sigma_multiplicative_prior_mu_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_multiplicative_prior_mu[@material=%s]" % (string_to_etxpath_expression(material_str)))
     sigma_multiplicative_prior_mu = numericunitsv.fromxml(_xmldoc,sigma_multiplicative_prior_mu_el).value("Unitless")
 
-    sigma_multiplicative_prior_sigma_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_multiplicative_prior_sigma[dc:spcmaterial=%s]" % (string_to_etxpath_expression(material_str)))
+    sigma_multiplicative_prior_sigma_el = _xmldoc.xpathsinglecontext(_element,"dc:shear_sigma_multiplicative_prior_sigma[@material=%s]" % (string_to_etxpath_expression(material_str)))
     sigma_multiplicative_prior_sigma = numericunitsv.fromxml(_xmldoc,sigma_multiplicative_prior_sigma_el).value("Unitless")
     
 
@@ -77,7 +77,7 @@ def run(_xmldoc,_element,
             material = outputdoc.xpathsinglecontextstr(crack,"dc:spcmaterial",default="UNKNOWN")
             assert(material == material_str)
             crackheat_table_el = outputdoc.xpathsinglecontext(crack,"dc:crackheat_table",default=None)
-            surrogate_el = outputdoc.xpathsinglecontext(crack,"dc:surrogate",default=None)
+            surrogate_el = outputdoc.xpathsinglecontext(crack,"dc:shear_surrogate",default=None)
             if crackheat_table_el is not None and surrogate_el is not None:
                 crackheat_table_href = hrefv.fromxml(outputdoc,crackheat_table_el)
                 surrogate_href = hrefv.fromxml(outputdoc,surrogate_el)
@@ -101,7 +101,7 @@ def run(_xmldoc,_element,
     #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
     estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
 
-    estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain_bool)
+    estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain_bool,shear=True)
 
 
     
@@ -114,7 +114,7 @@ def run(_xmldoc,_element,
     #posterior_estimation(10,4,cores=4,tune=20)
     
     
-    trace_frame_href = hrefv("%s_trace_frame.csv" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
+    trace_frame_href = hrefv("%s_shear_trace_frame.csv" % (material_str.replace(" ","_")),_xmldoc.getcontexthref().leafless())
     trace_df.to_csv(trace_frame_href.getpath())
     
     

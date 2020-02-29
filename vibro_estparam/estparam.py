@@ -29,6 +29,7 @@ import pandas as pd
 from theano.compile.ops import as_op
 
 from crackheat_surrogate2.load_surrogate import load_denorm_surrogates_from_jsonfile
+from crackheat_surrogate2.load_surrogate_shear import load_denorm_surrogates_shear_from_jsonfile
 from .mixednoise import CreateMixedNoise
 from .mixednoise_vibro_estparam import CreateMixedNoiseVibroEstparam
 
@@ -254,7 +255,7 @@ class estparam(object):
                    surrogatefiles=surrogatefiles,
                    accel_trisolve_devs=accel_trisolve_devs)
 
-    def load_data(self,filter_outside_closure_domain=True):
+    def load_data(self,filter_outside_closure_domain=True,shear=False):
         """Given the lists of crack_specimens, crackheatfiles, surrogatefiles,
         loaded into appropriate crack members, load the data from the files
         into into self.crack_surrogates, and self.crackheatfile_dataframes. 
@@ -270,14 +271,21 @@ class estparam(object):
         stored in the surrogate] are removed. 
         """
 
-        self.crack_surrogates = [ load_denorm_surrogates_from_jsonfile(filename,nonneg=True) for filename in self.surrogatefiles ]  
-
+        if shear:
+            self.crack_surrogates = [ load_denorm_surrogates_shear_from_jsonfile(filename,nonneg=True) for filename in self.surrogatefiles ]  
+            pass
+        else:
+            self.crack_surrogates = [ load_denorm_surrogates_from_jsonfile(filename,nonneg=True) for filename in self.surrogatefiles ]  
+            pass
         self.crackheatfile_dataframes = [ pd.read_csv(crackheat_file,dtype={"DynamicNormalStressAmpl (Pa)": str, "DynamicShearStressAmpl (Pa)": str, "BendingStress (Pa)": str}) for crackheat_file in self.crackheatfiles ]
         
+        #import pdb
+        #pdb.set_trace()
+
         self.crackheat_table = pd.concat(self.crackheatfile_dataframes,ignore_index=True) # NOTE: Pandas warning about sorting along non-concatenation axis should go away once all data has timestamps
 
 
-        assert(np.all(self.crackheat_table["DynamicNormalStressAmpl (Pa)"].map(float) > 100*self.crackheat_table["DynamicShearStressAmpl (Pa)"].map(float))) # Assumption that shear stress is negligible compared to normal stress for all of this data
+        #assert(np.all(self.crackheat_table["DynamicNormalStressAmpl (Pa)"].map(float) > 100*self.crackheat_table["DynamicShearStressAmpl (Pa)"].map(float))) # Assumption that shear stress is negligible compared to normal stress for all of this data ASSUMPTION ELIMINATED!!!
 
         # Add specimen numbers to crackheat table
         # If this next line is slow, can easily be accelerated with a dictionary!
@@ -991,11 +999,11 @@ class estparam(object):
             self.log_msqrtR = np.log(Print('msqrtR')(pm.Lognormal('msqrtR',mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)))  # !!!*** This might need to be changed.... the logarithm of a lognormal distribution is a normal distribution...
             self.msqrtR_prior = pm.Lognormal.dist(mu=self.msqrtR_prior_mu,sigma=self.msqrtR_prior_sigma)
             
-            self.crack_model_shear_factor_prior_mu=0.0
-            self.crack_model_shear_factor_prior_sigma=0.5
+            self.crack_model_shear_factor_prior_mu=2.2
+            self.crack_model_shear_factor_prior_sigma=3.0
             self.crack_model_shear_factor=pm.Lognormal('crack_model_shear_factor',mu=self.crack_model_shear_factor_prior_mu,sigma=self.crack_model_shear_factor_prior_sigma)
             self.crack_model_shear_factor_prior=pm.Lognormal.dist(mu=self.crack_model_shear_factor_prior_mu,sigma=self.crack_model_shear_factor_prior_sigma)
-            self.log_crack_model_shear_factor = np.log(crack_model_shear_factor)
+            self.log_crack_model_shear_factor = np.log(self.crack_model_shear_factor)
             
 
             #sigma_additive_prior_mu = 0.0
@@ -1072,7 +1080,7 @@ class estparam(object):
             #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
 
 
-            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR,self.log_crack_normal_shear_factor)) + self.predicted_crackheating_lower_bound 
+            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR,self.log_crack_model_shear_factor)) + self.predicted_crackheating_lower_bound 
                 
                 
             
@@ -1092,8 +1100,8 @@ class estparam(object):
             
             return (trace_df,
                     # Scalars
-                    crack_model_shear_factor_prior_mu,
-                    crack_model_shear_factor_prior_sigma,
+                    self.crack_model_shear_factor_prior_mu,
+                    self.crack_model_shear_factor_prior_sigma,
                     self.crackheat_scalefactor,
                     excfreq_median,
                     self.predicted_crackheating_lower_bound)
@@ -1110,6 +1118,7 @@ class estparam(object):
                                 msqrtR_prior_sigma,
                                 crack_model_shear_factor_prior_mu,
                                 crack_model_shear_factor_prior_sigma,
+                                sigma_additive_prior_mu_unscaled,
                                 sigma_additive_prior_sigma_unscaled,
                                 sigma_multiplicative_prior_mu,
                                 sigma_multiplicative_prior_sigma,
@@ -1281,7 +1290,7 @@ class estparam(object):
         pl.clf()
         pl.hist(sigma_additive_vals,bins=marginal_bins,density=True)
         sa_range=np.linspace(0,pl.axis()[1],100)
-        pl.plot(sa_range,halfnormal(sa_range,sigma_additive_prior_sigma_unscaled),'-')
+        pl.plot(sa_range,gaussian(sa_range,sigma_additive_prior_mu_unscaled,sigma_additive_prior_sigma_unscaled),'-')
         pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
         pl.xlabel('sigma_additive (J/cy)')
         pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
@@ -1292,7 +1301,7 @@ class estparam(object):
         pl.clf()
         pl.hist(sigma_additive_vals*1e3*excfreq_median,bins=marginal_bins,density=True)
         sap_range=np.linspace(0,pl.axis()[1],100) # note: sap_range is in mW
-        pl.plot(sap_range,halfnormal(sap_range/1e3/excfreq_median,sigma_additive_prior_sigma_unscaled)/1.e3/excfreq_median,'-')
+        pl.plot(sap_range,gaussian(sap_range/1e3/excfreq_median,sigma_additive_prior_mu_unscaled,sigma_additive_prior_sigma_unscaled)/1.e3/excfreq_median,'-')
         pl.plot(sap_range,gaussian(sap_range/1e3/excfreq_median,sigma_additive_estimate,sigma_additive_sd)/1.e3/excfreq_median,'-')
         pl.xlabel('sigma_additive (mW) assuming typ freq of %f kHz' % (excfreq_median/1e3))
         pl.grid()
@@ -1353,7 +1362,7 @@ class estparam(object):
         #self.msqrtR_estimate = (hist_msqrtR_edges[histpeakpos[1]]+hist_msqrtR_edges[histpeakpos[1]+1])/2.0
     
         # Compare
-        predicted = self.predict_crackheating(mu_estimate,np.log(msqrtR_estimate))*self.crackheat_table["ExcFreq (Hz)"].values
+        predicted = self.predict_crackheating(mu_estimate,np.log(msqrtR_estimate),log_crack_model_shear_factor_estimate)*self.crackheat_table["ExcFreq (Hz)"].values
         
         # add to crackheat_table
         
