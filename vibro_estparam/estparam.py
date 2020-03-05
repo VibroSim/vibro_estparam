@@ -325,10 +325,11 @@ class estparam(object):
         pass
     
 
-    def predict_crackheating_grad_mu(self,mu,log_msqrtR):
+    def predict_crackheating_grad_mu(self,mu,log_msqrtR): # NOTE: Will need to be updated to accommodate log_mu!!!
         """Predict derivative of crackheating with respect to mu for each row in self.crackheat_table,
         given hypothesized values for mu and log_msqrtR"""
-        
+
+        assert(0)
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
         # Could parallelize this loop!
@@ -349,7 +350,7 @@ class estparam(object):
         return retval
 
 
-    def predict_crackheating_grad_log_msqrtR(self,mu,log_msqrtR):
+    def predict_crackheating_grad_log_msqrtR(self,log_mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu for each row in self.crackheat_table,
         given hypothesized values for mu and log_msqrtR"""
         
@@ -361,8 +362,8 @@ class estparam(object):
             surrogate_key = "bs_pa_" + self.crackheat_table["BendingStress (Pa)"].iloc[index] + "_dnsa_pa_" + self.crackheat_table["DynamicNormalStressAmpl (Pa)"].iloc[index] + "_dssa_pa_" + self.crackheat_table["DynamicShearStressAmpl (Pa)"].iloc[index]
 
 
-            datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]) # .astype({"mu":np.float64,"log_msqrtR":np.float64})
-            datagrid = datagrid.append({"mu": float(mu),
+            datagrid = pd.DataFrame(columns=["log_mu","log_msqrtR"]) # .astype({"mu":np.float64,"log_msqrtR":np.float64})
+            datagrid = datagrid.append({"log_mu": float(log_mu),
                                         #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                         #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                         "log_msqrtR": float(log_msqrtR)},ignore_index=True)
@@ -373,7 +374,7 @@ class estparam(object):
     
     
     
-    def predict_crackheating(self,mu,log_msqrtR,log_crack_model_shear_factor=None):
+    def predict_crackheating(self,log_mu,log_msqrtR,log_crack_model_shear_factor=None):
         """Predict crackheating for each row in self.crackheat_table,
         given hypothesized single values for mu and log_msqrtR across the entire dataset"""
         
@@ -386,13 +387,13 @@ class estparam(object):
 
             datagrid = pd.DataFrame(columns=["mu","log_msqrtR"]) #.astype({"mu":np.float64,"log_msqrtR":np.float64})
             if log_crack_model_shear_factor is None:
-                datagrid = datagrid.append({"mu": float(mu),
+                datagrid = datagrid.append({"log_mu": float(log_mu),
                                             #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                             #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                             "log_msqrtR": float(log_msqrtR)},ignore_index=True)
                 pass
             else:
-                datagrid = datagrid.append({"mu": float(mu),
+                datagrid = datagrid.append({"log_mu": float(log_mu),
                                             #"bendingstress": self.crackheat_table["BendingStress (Pa)"].values[index],
                                             #"dynamicstress": self.crackheat_table["DynamicNormalStressAmpl (Pa)"].values[index],
                                             "log_msqrtR": float(log_msqrtR),
@@ -411,7 +412,7 @@ class estparam(object):
     def predict_crackheating_per_specimen(self,mu,log_msqrtR):
         """Predict crackheating for each row in self.crackheat_table,
         given hypothesized values for mu and log_msqrtR per specimen"""
-        
+        assert(0)  # !!! Needs to be updated to support log_mu!!!***
         retval = np.zeros(self.crackheat_table.shape[0],dtype='d')
         
         # Could parallelize this loop!
@@ -436,7 +437,7 @@ class estparam(object):
     def predict_crackheating_per_specimen_grad_mu(self,mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu vector for each row in self.crackheat_table,
         given hypothesized values for mu and log_msqrtR"""
-        
+        assert(0) # !!!*** needs to be updated to support log_mu
         retval = np.zeros((self.crackheat_table.shape[0],self.M),dtype='d')
         
         # Could parallelize this loop!
@@ -461,6 +462,7 @@ class estparam(object):
     def predict_crackheating_per_specimen_grad_log_msqrtR(self,mu,log_msqrtR):
         """Predict derivative of crackheating with respect to mu vector for each row in self.crackheat_table,
         given hypothesized per-specimen vectors for mu and log_msqrtR"""
+        assert(0) # !!!*** needs to be updated to support log_mu
         
         retval = np.zeros((self.crackheat_table.shape[0],self.M),dtype='d')
         
