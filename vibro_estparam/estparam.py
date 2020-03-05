@@ -581,13 +581,13 @@ class estparam(object):
                     log_msqrtR_testval = tt.dscalar('log_msqrtR_testval')
                     log_msqrtR_testval.tag.test_value = np.log(5e6) # pymc3 turns on theano's config.compute_test_value switch, so we have to provide a value
                     
-                    test_function = theano.function([mu_testval,log_msqrtR_testval],self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval))
-                    jac_mu = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),mu_testval)
+                    test_function = theano.function([mu_testval,log_msqrtR_testval],self.predict_crackheating_op_instance(np.log(mu_testval),log_msqrtR_testval))
+                    jac_mu = tt.jacobian(self.predict_crackheating_op_instance(np.log(mu_testval),log_msqrtR_testval),mu_testval)
                     jac_mu_analytic = jac_mu.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
                     jac_mu_numeric = (test_function(0.301,np.log(5e6))-test_function(0.300,np.log(5e6)))/.001
                     assert(np.linalg.norm(jac_mu_analytic-jac_mu_numeric)/np.linalg.norm(jac_mu_analytic) < .05)
                     
-                    jac_log_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(mu_testval,log_msqrtR_testval),log_msqrtR_testval)
+                    jac_log_msqrtR = tt.jacobian(self.predict_crackheating_op_instance(np.log(mu_testval),log_msqrtR_testval),log_msqrtR_testval)
                     jac_log_msqrtR_analytic = jac_log_msqrtR.eval({ mu_testval: 0.3, log_msqrtR_testval: np.log(5e6)})
                     jac_log_msqrtR_numeric = (test_function(0.300,np.log(5.0e6)+.001)-test_function(0.300,np.log(5.0e6)))/.001
                     assert(np.linalg.norm(jac_log_msqrtR_analytic-jac_log_msqrtR_numeric)/np.linalg.norm(jac_log_msqrtR_analytic) < .05)
@@ -600,11 +600,11 @@ class estparam(object):
                         print("grad_log_msqrtR_values = %s" % (str(self.predict_crackheating_grad_log_msqrtR(np.array([0.3]), np.array([np.log(5e6)])))))
                         
                         # Test gradient with respect to mu
-                        theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_op_instance(mu_val, theano.shared(5e6)) ,[ 0.3],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
+                        theano.tests.unittest_tools.verify_grad(lambda mu_val: self.predict_crackheating_op_instance(np.log(mu_val), theano.shared(5e6)) ,[ 0.3],abs_tol=1e-12,rel_tol=1e-5) # mu=0.3, msqrtR=5e6
                         # Test gradient with respect to msqrtR
-                        theano.tests.unittest_tools.verify_grad(lambda log_msqrtR_val: self.predict_crackheating_op_instance(theano.shared(0.3),log_msqrtR_val) ,[ np.log(5e6) ],abs_tol=1e-20,rel_tol=1e-8,eps=1.0e-3) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors.
+                        theano.tests.unittest_tools.verify_grad(lambda log_msqrtR_val: self.predict_crackheating_op_instance(np.log(theano.shared(0.3)),log_msqrtR_val) ,[ np.log(5e6) ],abs_tol=1e-20,rel_tol=1e-8,eps=1.0e-3) # mu=0.3, msqrtR=5e6  NOTE: rel_tol is very tight here because Theano gradient.py/abs_rel_err() lower bounds the relative divisor to 1.e-8 and if we are not tight, we don't actually diagnose errors.
                         # Test combined gradient
-                        theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ 0.3, np.log(5e6) ],abs_tol=1e-20,rel_tol=1e-8,eps=1.0e-3) 
+                        theano.tests.unittest_tools.verify_grad(self.predict_crackheating_op_instance,[ np.log(0.3), np.log(5e6) ],abs_tol=1e-20,rel_tol=1e-8,eps=1.0e-3) 
                         print("\n\n\nVerify_grad() completed!!!\n\n\n")
                         pass
                     finally:
@@ -615,10 +615,10 @@ class estparam(object):
                 
                 
                 # Create pymc3 predicted_crackheating expression
-                #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
+                #self.predicted_crackheating = self.predict_crackheating_op_instance(np.log(self.mu),self.log_msqrtR)
 
 
-                self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)) + self.predicted_crackheating_lower_bound 
+                self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(np.log(self.mu),self.log_msqrtR)) + self.predicted_crackheating_lower_bound 
                 
                 
             
@@ -1080,7 +1080,7 @@ class estparam(object):
             #self.predicted_crackheating = self.predict_crackheating_op_instance(self.mu,self.log_msqrtR)
 
 
-            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(self.mu,self.log_msqrtR,self.log_crack_model_shear_factor)) + self.predicted_crackheating_lower_bound 
+            self.predicted_crackheating = pm.Deterministic('predicted_crackheating',self.predict_crackheating_op_instance(np.log(self.mu),self.log_msqrtR,self.log_crack_model_shear_factor)) + self.predicted_crackheating_lower_bound 
                 
                 
             
