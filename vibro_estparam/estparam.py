@@ -497,8 +497,8 @@ class estparam(object):
             #msqrtR = pm.Uniform('msqrtR',lower=500000,upper=50e6)
 
             self.crackheat_scalefactor=1e10
-            self.mu_prior_mu = 0.0
-            self.mu_prior_sigma=1.0
+            self.mu_prior_mu = np.log(0.4)
+            self.mu_prior_sigma=0.4
             self.mu = Print('mu')(pm.Lognormal('mu',mu=self.mu_prior_mu,sigma=self.mu_prior_sigma))
             self.mu_prior = pm.Lognormal.dist(mu=self.mu_prior_mu,sigma=self.mu_prior_sigma)
 
