@@ -31,6 +31,10 @@ def run(_xmldoc,_element,
         partial_pooling_bool=False,
         filter_outside_closure_domain_bool=False):
     
+
+    ignore_datapoint_elements = _xmldoc.xpathcontext(_element,"/prx:inputfiles/dc:estparam_ignore_datapoint")
+    ignore_datapoints = [ (_xmldoc.getattr(ide,"specimen"), _xmldoc.getattr(ide,"measnum")) for ide in ignore_datapoint_elements ]
+
     outputfiles = _xmldoc.xpathcontext(_element,"/prx:inputfiles/prx:inputfile/prx:outputfile")
 
     #context = cl.create_some_context()
@@ -74,7 +78,7 @@ def run(_xmldoc,_element,
 
 
     #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
-    estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
+    estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,ignore_datapoints,accel_trisolve_devs)
 
     estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain_bool)
 
