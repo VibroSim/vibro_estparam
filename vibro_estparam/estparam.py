@@ -182,6 +182,7 @@ class estparam(object):
     crack_specimens=None  # Array of specimen names (strings)
     crackheatfiles=None  # Array of crack heat CSV file names (strings)
     surrogatefiles=None  # Array of surrogate JSON file names (strings)
+    ignore_datapoints=None # list of (specimen,measnum) values for data points to ignore
     accel_trisolve_devs=None # Optional GPU Acceleration parameters
 
     # results of load_data() method
@@ -247,12 +248,13 @@ class estparam(object):
         pass
 
     @classmethod
-    def fromfilelists(cls,crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs=None):
+    def fromfilelists(cls,crack_specimens,crackheatfiles,surrogatefiles,ignore_datapoints,accel_trisolve_devs=None):
         """Load crack data from parallel lists
         of specimens, crack heating file names, and surrogate .json file names"""
         return cls(crack_specimens=crack_specimens,
                    crackheatfiles=crackheatfiles,
                    surrogatefiles=surrogatefiles,
+                   ignore_datapoints=ignore_datapoints,
                    accel_trisolve_devs=accel_trisolve_devs)
 
     def load_data(self,filter_outside_closure_domain=True,shear=False):
@@ -301,6 +303,14 @@ class estparam(object):
     
         self.crackheat_table.drop(NaNrownums,axis=0,inplace=True)
         self.crackheat_table.reset_index(drop=True,inplace=True)
+
+        # Drop rows in crackheat_table corresponding to (specimen,measnum) indicated in ignore_datapoints list
+        for (id_specimen,id_measnum) in ignore_datapoints:
+            ignore_datapoint_rownums = np.where((self.crackheat_table["measnum"].astype(np.int32) == int(id_measnum)) & (self.crackheat_table["Specimen"] == id_specimen))[0]
+            self.crackheat_table.drop(ignore_datapoint_rownums,axis=0,inplace=True)
+            pass
+        self.crackheat_table.reset_index(drop=True,inplace=True)
+        
 
         if filter_outside_closure_domain:
             # Drop rows in crackheat_table with bending stress less than closure_lowest_avg_load_used
