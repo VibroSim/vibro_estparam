@@ -305,7 +305,7 @@ class estparam(object):
         self.crackheat_table.reset_index(drop=True,inplace=True)
 
         # Drop rows in crackheat_table corresponding to (specimen,measnum) indicated in ignore_datapoints list
-        for (id_specimen,id_measnum) in ignore_datapoints:
+        for (id_specimen,id_measnum) in self.ignore_datapoints:
             ignore_datapoint_rownums = np.where((self.crackheat_table["measnum"].astype(np.int32) == int(id_measnum)) & (self.crackheat_table["Specimen"] == id_specimen))[0]
             self.crackheat_table.drop(ignore_datapoint_rownums,axis=0,inplace=True)
             pass
