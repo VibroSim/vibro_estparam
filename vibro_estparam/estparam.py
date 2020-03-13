@@ -784,6 +784,7 @@ class estparam(object):
         pl.title('sigma_additive')
         pl.subplot(2,2,4)
         pl.plot(sigma_multiplicative_vals)
+        pl.tight_layout(pad=1.08,h_pad=2.0)
         pl.title('sigma_multiplicative')
         
 
@@ -799,21 +800,24 @@ class estparam(object):
         pl.plot(mu_range,lognormal(mu_range,mu_prior_mu,mu_prior_sigma),'-')
         pl.plot(mu_range,gaussian(mu_range,mu_estimate,mu_sd),'-')
         pl.plot(mu_range,lognormal(mu_range,log_mu_estimate,log_mu_sd),'-')
-        pl.xlabel('mu')
-        pl.title('mu lognormal mu = %g; mu lognormal sd = %g' % (log_mu_estimate,log_mu_sd))
+        pl.xlabel('mu (unitless)')
+        pl.ylabel('Probability density')
+        pl.title('mu lognormal mu = %g;\nmu lognormal sd = %g' % (log_mu_estimate,log_mu_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
         
         
         msqrtR_hist = pl.figure()
         pl.clf()
-        pl.hist(msqrtR_vals,bins=marginal_bins,density=True)
-        msqrtR_range=np.linspace(0,pl.axis()[1],100)
-        pl.plot(msqrtR_range,lognormal(msqrtR_range,msqrtR_prior_mu,msqrtR_prior_sigma),'-')
-        pl.plot(msqrtR_range,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd),'-')
-        pl.plot(msqrtR_range,lognormal(msqrtR_range,log_msqrtR_estimate,log_msqrtR_sd),'-')
+        pl.hist(msqrtR_vals/1e7,bins=marginal_bins,density=True)
+        msqrtR_range=np.linspace(0,pl.axis()[1]*1e7,100)
+        pl.plot(msqrtR_range/1e7,lognormal(msqrtR_range,msqrtR_prior_mu,msqrtR_prior_sigma)*1e7,'-')
+        pl.plot(msqrtR_range/1e7,gaussian(msqrtR_range,msqrtR_estimate,msqrtR_sd)*1e7,'-')
+        pl.plot(msqrtR_range/1e7,lognormal(msqrtR_range,log_msqrtR_estimate,log_msqrtR_sd)*1e7,'-')
         pl.xlabel('m*sqrtR')
-        pl.title('m*sqrtR lognormal mu = %g; m*sqrtR lognormal sd = %g' % (log_msqrtR_estimate,log_msqrtR_sd))
+        pl.title('m*sqrtR lognormal mu = %g;\nm*sqrtR lognormal sd = %g' % (log_msqrtR_estimate,log_msqrtR_sd))
+        pl.xlabel('m*sqrt(R) (10^7 1/m^(3/2))')
+        pl.ylabel('Probability density (1/10^7 m^(3/2))')
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
@@ -830,22 +834,26 @@ class estparam(object):
 
         sigma_additive_hist = pl.figure()
         pl.clf()
-        pl.hist(sigma_additive_vals,bins=marginal_bins,density=True)
-        sa_range=np.linspace(0,pl.axis()[1],100)
-        pl.plot(sa_range,halfnormal(sa_range,sigma_additive_prior_sigma_unscaled),'-')
-        pl.plot(sa_range,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd),'-')
-        pl.xlabel('sigma_additive (J/cy)')
+        pl.hist(sigma_additive_vals*1e9,bins=marginal_bins,density=True)
+        sa_range=np.linspace(0,pl.axis()[1]/1e9,100)
+        pl.plot(sa_range*1e9,halfnormal(sa_range,sigma_additive_prior_sigma_unscaled)/1e9,'-')
+        pl.plot(sa_range*1e9,gaussian(sa_range,sigma_additive_estimate,sigma_additive_sd)/1e9,'-')
+        pl.xlabel('sigma_additive (10^-9 J/cy)')
+        pl.ylabel('Probability density (10^9 cy/J)')
         pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
-        pl.title('sigma_additive normal mu = %g; sigma_additive normal sd = %g' % (sigma_additive_estimate,sigma_additive_sd))
+        pl.title('sigma_additive normal mu = %g;\nsigma_additive normal sd = %g' % (sigma_additive_estimate,sigma_additive_sd))
         pl.grid()
 
         sigma_additive_power_hist = pl.figure()
         pl.clf()
         pl.hist(sigma_additive_vals*1e3*excfreq_median,bins=marginal_bins,density=True)
-        sap_range=np.linspace(0,pl.axis()[1],100) # note: sap_range is in mW
-        pl.plot(sap_range,halfnormal(sap_range/1e3/excfreq_median,sigma_additive_prior_sigma_unscaled)/1.e3/excfreq_median,'-')
-        pl.plot(sap_range,gaussian(sap_range/1e3/excfreq_median,sigma_additive_estimate,sigma_additive_sd)/1.e3/excfreq_median,'-')
+        sap_range=np.linspace(0,pl.axis()[1]/1e3,100) # note: sap_range is in W
+        pl.plot(sap_range*1e3,halfnormal(sap_range/excfreq_median,sigma_additive_prior_sigma_unscaled)/1.e3/excfreq_median,'-')
+        pl.plot(sap_range*1e3,gaussian(sap_range/excfreq_median,sigma_additive_estimate,sigma_additive_sd)/1.e3/excfreq_median,'-')
         pl.xlabel('sigma_additive (mW) assuming typ freq of %f kHz' % (excfreq_median/1e3))
+        pl.ylabel('Probability density (1/mW)')
+        pl.legend(('Prior','Posterior approx.','MCMC Histogram'),loc="best")
+        pl.title('sigma_additive(W) normal mu = %g;\nsigma_additive(W) normal sd = %g' % (sigma_additive_estimate*excfreq_median,sigma_additive_sd*excfreq_median))
         pl.grid()
 
 
@@ -856,8 +864,9 @@ class estparam(object):
         pl.plot(sm_range,lognormal(sm_range,sigma_multiplicative_prior_mu,sigma_multiplicative_prior_sigma),'-')
         pl.plot(sm_range,gaussian(sm_range,sigma_multiplicative_estimate,sigma_multiplicative_sd),'-')
         pl.plot(sm_range,lognormal(sm_range,log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd),'-')
-        pl.xlabel('sigma_multiplicative')
-        pl.title('sigma_mul lognormal mu = %g; sigma_mul lognormal sd = %g' % (log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd))
+        pl.xlabel('sigma_multiplicative (unitless)')
+        pl.xlabel('Probability density (unitless)')
+        pl.title('sigma_mul lognormal mu = %g;\nsigma_mul lognormal sd = %g' % (log_sigma_multiplicative_estimate,log_sigma_multiplicative_sd))
         pl.legend(('Prior','Posterior approx. (normal)','Posteror approx. (lognormal)','MCMC Histogram'),loc="best")
         pl.grid()
 
@@ -931,7 +940,7 @@ class estparam(object):
         pl.legend(specimen_group_specimens,loc='lower right')
         pl.xlabel('Predicted heating from model (mW)')
         pl.ylabel('Actual heating from experiment (mW)')
-        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
+        pl.title('mu_estimate=%.3g; msqrtR_estimate=%.3g  m^(-3/2)' % (mu_estimate,msqrtR_estimate))
         pl.grid()
 
         markerstyle_cyclerz=cycler.cycler(marker=['o','v','^','<','>','s','p','+','x'])()
@@ -945,7 +954,7 @@ class estparam(object):
         pl.axis((0,np.max(predicted)*0.25*1e3,0,np.max(predicted)*0.2*1e3))
         pl.xlabel('Predicted heating from model (mW)')
         pl.ylabel('Actual heating from experiment (mW)')
-        pl.title('mu_estimate=%g; msqrtR_estimate=%g' % (mu_estimate,msqrtR_estimate))
+        pl.title('mu_estimate=%.3g; msqrtR_estimate=%.3g m^(-3/2)' % (mu_estimate,msqrtR_estimate))
         pl.grid()
 
 
