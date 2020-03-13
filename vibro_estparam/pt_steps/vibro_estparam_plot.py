@@ -27,6 +27,8 @@ from matplotlib import pyplot as pl
 def run(_xmldoc,_element,
         material_str):
 
+    ignore_datapoint_elements = _xmldoc.xpathcontext(_element,"/prx:inputfiles/dc:estparam_ignore_datapoint")
+    ignore_datapoints = [ (_xmldoc.getattr(ide,"specimen"), _xmldoc.getattr(ide,"measnum")) for ide in ignore_datapoint_elements ]
     
     
     outputfiles = _xmldoc.xpathcontext(_element,"/prx:inputfiles/prx:inputfile/prx:outputfile")
@@ -101,7 +103,7 @@ def run(_xmldoc,_element,
     filter_outside_closure_domain = bool(ast.literal_eval(_xmldoc.xpathsinglecontextstr(_element,"dc:filter_outside_closure_domain[@material='%s']" % (material_str))))
 
     #estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
-    estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,accel_trisolve_devs)
+    estimator = estparam.fromfilelists(crack_specimens,crackheatfiles,surrogatefiles,ignore_datapoints,accel_trisolve_devs)
 
     estimator.load_data(filter_outside_closure_domain=filter_outside_closure_domain)
 
